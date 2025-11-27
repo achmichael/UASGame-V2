@@ -1,0 +1,195 @@
+╔═══════════════════════════════════════════════════════════════╗
+║  🔧 PANDUAN SETUP CEPAT - GridBuilder (Bahasa Indonesia)     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+MASALAH: Player, Item, dan Enemy tidak spawn di dalam labirin
+
+SOLUSI: Ikuti langkah-langkah berikut:
+
+┌───────────────────────────────────────────────────────────────┐
+│  CARA 1: AUTO-TAG MENGGUNAKAN SCRIPT (TERMUDAH)              │
+└───────────────────────────────────────────────────────────────┘
+
+1. Attach script "LabyrinthFloorAutoTagger.cs" ke GameObject parent labirin
+
+2. Di Inspector LabyrinthFloorAutoTagger:
+   ✓ Target Tag: "Floor"
+   ✓ Floor Keywords: floor, ground, lantai, base
+   ✓ Tag All Colliders: ☑ (centang jika ingin tag semua)
+
+3. Klik kanan pada script → "Tag All Floors"
+
+4. Cek Console, harusnya muncul:
+   "[FloorTagger] ✓ SELESAI! 50 objects diberi tag 'Floor'"
+
+5. Selesai! Lanjut ke CARA 3 untuk setup GridBuilder
+
+┌───────────────────────────────────────────────────────────────┐
+│  CARA 2: MANUAL TAG (JIKA AUTO GAGAL)                        │
+└───────────────────────────────────────────────────────────────┘
+
+1. Pastikan tag "Floor" sudah ada:
+   Edit → Project Settings → Tags and Layers
+   Klik + untuk tambah tag "Floor" jika belum ada
+
+2. Di Hierarchy, expand GameObject labirin
+
+3. Select semua GameObject yang merupakan lantai/ground labirin
+
+4. Di Inspector, set Tag = "Floor"
+
+5. Verify: Pilih semua floor → Tag harus menunjukkan "Floor"
+
+┌───────────────────────────────────────────────────────────────┐
+│  CARA 3: SETUP GRIDBUILDER                                    │
+└───────────────────────────────────────────────────────────────┘
+
+1. Pilih GameObject yang punya GridBuilder component
+
+2. Di Inspector GridBuilder, setting berikut:
+
+   Grid Scan Settings:
+   ├─ Grid Width: 50 (atau lebih besar dari labirin)
+   ├─ Grid Height: 50 (atau lebih besar dari labirin)
+   ├─ Node Spacing: 1.0 (lebih kecil = lebih akurat)
+   └─ Grid Origin: (0, 0, 0) atau auto-detect
+
+   Raycast Detection:
+   ├─ Raycast Height: 50 (HARUS lebih tinggi dari labirin!)
+   ├─ Raycast Max Distance: 100
+   └─ Node Radius: 0.4
+
+   Floor Detection Method:
+   ├─ Detection Method: UseBoth (paling aman)
+   ├─ Floor Tag: "Floor"
+   └─ Floor Layer: Everything (atau layer khusus floor)
+
+   Auto Detection: (RECOMMENDED!)
+   ├─ ✅ Auto Detect Bounds
+   ├─ Labyrinth Parent: [Drag GameObject labirin kesini]
+   └─ Padding: 2.0
+
+   Visualization:
+   ├─ ✅ Show Gizmos
+   ├─ ✅ Show Only Walkable
+   └─ Walkable Color: Green
+
+3. Pastikan LabyrinthSpawnManager.gridBuilder sudah diisi!
+
+┌───────────────────────────────────────────────────────────────┐
+│  CARA 4: TEST & VERIFY                                        │
+└───────────────────────────────────────────────────────────────┘
+
+1. Play game atau masuk Scene view
+
+2. Lihat Console, harusnya muncul:
+   
+   [GridBuilder] ✓ Grid generation complete:
+     - Scanned: 2500 cells (50x50)
+     - Walkable: 847 cells (33.9%)  ← Harus > 0!
+     - Floor hits: 847
+   
+   [SpawnManager] ✓ GridBuilder has 847 walkable cells ready
+
+3. Lihat Scene view:
+   ✓ Kubus HIJAU di atas lantai = VALID spawn points
+   ✓ Jika tidak ada kubus hijau = Ada masalah!
+
+4. Test spawn:
+   ✓ Player harus spawn di atas lantai (kubus hijau)
+   ✓ Item/Enemy harus spawn di atas lantai
+
+┌───────────────────────────────────────────────────────────────┐
+│  TROUBLESHOOTING                                              │
+└───────────────────────────────────────────────────────────────┘
+
+❌ Console: "NO WALKABLE CELLS FOUND"
+
+   Solusi:
+   1. Cek semua floor sudah di-tag "Floor"
+      → Gunakan LabyrinthFloorAutoTagger
+   
+   2. Raycast Height terlalu rendah
+      → Set ke 100 atau lebih tinggi
+   
+   3. Grid Origin tidak menutupi labirin
+      → Enable "Auto Detect Bounds"
+      → Set Labyrinth Parent
+   
+   4. Floor tidak punya Collider
+      → Add BoxCollider/MeshCollider ke floor
+
+❌ Scene view tidak ada kubus hijau
+
+   Solusi:
+   1. Enable "Show Gizmos" di GridBuilder
+   2. Enable "Show Only Walkable"
+   3. Cek Scene view punya Gizmos enabled (icon di toolbar)
+
+❌ Hanya sedikit kubus hijau
+
+   Solusi:
+   1. Perkecil Node Spacing (misal 0.5)
+   2. Perbesar Grid Width/Height
+   3. Cek semua floor sudah di-tag
+
+❌ Object masih spawn di luar labirin
+
+   Solusi:
+   1. Cek floor yang di luar juga ke-tag "Floor"
+   2. Hapus tag "Floor" dari object di luar labirin
+   3. Set Detection Method = UseTag (bukan UseBoth)
+
+┌───────────────────────────────────────────────────────────────┐
+│  CHECKLIST FINAL                                              │
+└───────────────────────────────────────────────────────────────┘
+
+Sebelum test, pastikan:
+
+[ ] Tag "Floor" sudah ada di Project Settings
+[ ] Semua lantai labirin punya tag "Floor"
+[ ] Semua lantai labirin punya Collider
+[ ] GridBuilder.autoDetectBounds = TRUE
+[ ] GridBuilder.labyrinthParent = GameObject labirin
+[ ] GridBuilder.raycastHeight > tinggi labirin
+[ ] GridBuilder.showGizmos = TRUE
+[ ] LabyrinthSpawnManager.gridBuilder sudah diisi
+[ ] Console tidak ada error merah saat Play
+
+┌───────────────────────────────────────────────────────────────┐
+│  CARA CEPAT DEBUG                                             │
+└───────────────────────────────────────────────────────────────┘
+
+Tambahkan script ini ke GameObject kosong untuk test:
+
+using UnityEngine;
+
+public class GridDebugger : MonoBehaviour
+{
+    void Start()
+    {
+        GridBuilder gb = FindObjectOfType<GridBuilder>();
+        if (gb != null)
+        {
+            Debug.Log($"GridBuilder found!");
+            Debug.Log($"Walkable cells: {gb.GetWalkableCellCount()}");
+            
+            if (gb.GetWalkableCellCount() > 0)
+            {
+                Vector3 testPos = gb.GetRandomWalkablePosition(1f);
+                Debug.Log($"Test spawn position: {testPos}");
+            }
+        }
+        else
+        {
+            Debug.LogError("GridBuilder NOT FOUND!");
+        }
+    }
+}
+
+═══════════════════════════════════════════════════════════════
+
+INGAT: Kubus HIJAU di Scene view = Posisi spawn yang VALID!
+Jika tidak ada kubus hijau = Floor belum di-tag dengan benar!
+
+═══════════════════════════════════════════════════════════════
