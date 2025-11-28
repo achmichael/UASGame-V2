@@ -29,6 +29,10 @@ public class QuickFixSpawnSystem : MonoBehaviour
     public GridBuilder gridBuilder;
     public LabyrinthSpawnManager spawnManager;
     
+    [Header("⚠️ EXCLUDE FROM AUTO-TAGGING")]
+    [Tooltip("Floor objects yang TIDAK ingin di-tag sebagai 'Floor'")]
+    public GameObject[] excludedFloors;
+    
     void Start()
     {
         if (autoFixOnStart)
@@ -143,10 +147,18 @@ public class QuickFixSpawnSystem : MonoBehaviour
         // Tag all colliders in labyrinth
         Collider[] allColliders = labyrinthParent.GetComponentsInChildren<Collider>(true);
         int tagged = 0;
+        int excluded = 0;
         
         foreach (Collider col in allColliders)
         {
             if (col == null) continue;
+            
+            // SKIP jika ada di exclude list
+            if (IsExcluded(col.gameObject))
+            {
+                excluded++;
+                continue;
+            }
             
             // Tag semua collider yang bukan trigger
             if (!col.isTrigger)
@@ -158,10 +170,40 @@ public class QuickFixSpawnSystem : MonoBehaviour
         
         Debug.Log($"✓ Tagged {tagged} objects as 'Floor'");
         
+        if (excluded > 0)
+            Debug.Log($"⚠️ Skipped {excluded} excluded objects");
+        
         if (tagged == 0)
         {
             Debug.LogError("❌ No colliders found to tag!");
         }
+    }
+    
+    // Check apakah GameObject ada di exclude list
+    bool IsExcluded(GameObject obj)
+    {
+        if (excludedFloors == null || excludedFloors.Length == 0)
+            return false;
+        
+        // Check exact match
+        foreach (GameObject excluded in excludedFloors)
+        {
+            if (excluded == null) continue;
+            
+            if (obj == excluded)
+                return true;
+            
+            // Check parent hierarchy (jika exclude parent, semua child ikut excluded)
+            Transform parent = obj.transform;
+            while (parent != null)
+            {
+                if (parent.gameObject == excluded)
+                    return true;
+                parent = parent.parent;
+            }
+        }
+        
+        return false;
     }
     
     void FixGridBuilder()
@@ -183,16 +225,16 @@ public class QuickFixSpawnSystem : MonoBehaviour
         gridBuilder.floorTag = "Floor";
         
         // Raycast settings
-        if (gridBuilder.raycastHeight < 10f)
+        if (gridBuilder.raycastStartOffset < 5f)
         {
-            gridBuilder.raycastHeight = 50f;
-            Debug.Log("✓ Set raycastHeight = 50");
+            gridBuilder.raycastStartOffset = 5f;
+            Debug.Log("✓ Set raycastStartOffset = 5");
         }
         
-        if (gridBuilder.raycastMaxDistance < 50f)
+        if (gridBuilder.raycastMaxDistance < 20f)
         {
-            gridBuilder.raycastMaxDistance = 100f;
-            Debug.Log("✓ Set raycastMaxDistance = 100");
+            gridBuilder.raycastMaxDistance = 50f;
+            Debug.Log("✓ Set raycastMaxDistance = 50");
         }
         
         // Grid settings

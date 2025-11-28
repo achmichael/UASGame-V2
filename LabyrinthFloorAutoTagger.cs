@@ -34,6 +34,10 @@ public class LabyrinthFloorAutoTagger : MonoBehaviour
     [Tooltip("Tag semua child collider tanpa filter keyword")]
     public bool tagAllColliders = false;
     
+    [Header("⚠️ EXCLUDE FROM AUTO-TAGGING")]
+    [Tooltip("Floor objects yang TIDAK ingin di-tag")]
+    public GameObject[] excludedFloors;
+    
     [Header("Info")]
     [SerializeField] private int floorCount = 0;
     
@@ -74,6 +78,12 @@ public class LabyrinthFloorAutoTagger : MonoBehaviour
         foreach (Collider col in allColliders)
         {
             if (col == null) continue;
+            
+            // SKIP jika ada di exclude list
+            if (IsExcluded(col.gameObject))
+            {
+                continue;
+            }
             
             bool shouldTag = false;
             
@@ -134,6 +144,33 @@ public class LabyrinthFloorAutoTagger : MonoBehaviour
         EditorUtility.SetDirty(gameObject);
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
         #endif
+    }
+    
+    // Check apakah GameObject ada di exclude list
+    bool IsExcluded(GameObject obj)
+    {
+        if (excludedFloors == null || excludedFloors.Length == 0)
+            return false;
+        
+        // Check exact match
+        foreach (GameObject excluded in excludedFloors)
+        {
+            if (excluded == null) continue;
+            
+            if (obj == excluded)
+                return true;
+            
+            // Check parent hierarchy (jika exclude parent, semua child ikut excluded)
+            Transform parent = obj.transform;
+            while (parent != null)
+            {
+                if (parent.gameObject == excluded)
+                    return true;
+                parent = parent.parent;
+            }
+        }
+        
+        return false;
     }
     
     bool TagExists(string tag)

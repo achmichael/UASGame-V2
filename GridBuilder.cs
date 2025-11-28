@@ -2,19 +2,19 @@
 // 🚀 Generates grid ONLY inside labyrinth shape using downward raycasts
 //
 // KEY FEATURES:
-// ✓ Raycast from above to detect "Floor" tagged colliders
-// ✓ Only creates grid cells that hit actual floor surfaces
-// ✓ Stores walkable world positions in List<Vector3> for fast spawning
-// ✓ GetRandomWalkablePosition() for guaranteed valid spawn points
-// ✓ Perfect labyrinth shape following (no bounding box approximation)
-// ✓ Visual debug showing only walkable tiles
+// ✓ Raycast from +5 units above each cell to detect "Floor" tagged colliders
+// ✓ ONLY creates grid cells that hit actual floor surfaces
+// ✓ Skips generating cells that don't hit floor - NO unwalkable cells stored
+// ✓ Stores ONLY valid cells in List<Vector3> validCells
+// ✓ GetRandomValidCell() for guaranteed valid spawn points
+// ✓ Grid exactly follows labyrinth floor silhouette
+// ✓ Visual debug showing ONLY valid cells (green dots)
 //
 // SETUP REQUIREMENTS:
 // 1. Tag all labyrinth floor colliders as "Floor"
 // 2. Set gridWidth/gridHeight large enough to cover entire labyrinth area
-// 3. Set nodeSpacing to desired resolution (smaller = more accurate)
-// 4. Set raycastHeight high enough to be above all floor surfaces
-// 5. Adjust raycastMaxDistance if floors are very deep
+// 3. Set nodeSpacing to desired resolution (smaller = more accurate, 1.0 recommended)
+// 4. Raycasts start from +5 units above each cell position
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -35,11 +35,17 @@ public class GridBuilder : MonoBehaviour
     public Vector3 gridOrigin = Vector3.zero;
     
     [Header("Raycast Detection")]
-    [Tooltip("Height above grid origin to start raycasts from")]
-    public float raycastHeight = 50f;
+    [Tooltip("Height above each cell to start raycast (recommend 5-10 units)")]
+    public float raycastStartOffset = 5f;
     
     [Tooltip("Maximum distance to raycast downward")]
-    public float raycastMaxDistance = 100f;
+    public float raycastMaxDistance = 50f;
+    
+    [Tooltip("Use adaptive raycast height (recommended for stairs/slopes)")]
+    public bool useAdaptiveHeight = true;
+    
+    [Tooltip("Additional height for adaptive raycast (for stairs)")]
+    public float adaptiveHeightBonus = 10f;
     
     [Tooltip("Radius for node representation")]
     public float nodeRadius = 0.4f;
@@ -80,10 +86,13 @@ public class GridBuilder : MonoBehaviour
     // ==================== PUBLIC DATA ====================
     
     [HideInInspector]
-    public Node[,] grid;  // Full 2D grid (includes non-walkable cells as null or marked unwalkable)
+    public Node[,] grid;  // 2D grid (contains ONLY valid floor nodes, others are null)
     
     [HideInInspector]
-    public List<Vector3> walkableCells = new List<Vector3>();  // 🚀 NEW: Fast lookup for spawning
+    public List<Vector3> validCells = new List<Vector3>();  // 🚀 List of ONLY valid floor positions
+    
+    [HideInInspector]
+    public List<Vector3> walkableCells = new List<Vector3>();  // Alias for compatibility (same as validCells)
     
     // ==================== INITIALIZATION ====================
     
@@ -130,49 +139,59 @@ public class GridBuilder : MonoBehaviour
         gridWidth = Mathf.Max(10, Mathf.CeilToInt(totalWidth / nodeSpacing));
         gridHeight = Mathf.Max(10, Mathf.CeilToInt(totalHeight / nodeSpacing));
         
-        // Set raycast height above highest point
-        raycastHeight = bounds.max.y + 10f;
-        
-        LogDebug($"Auto-detected grid: Origin={gridOrigin}, Size={gridWidth}x{gridHeight}, RaycastHeight={raycastHeight}");
+        LogDebug($"Auto-detected grid: Origin={gridOrigin}, Size={gridWidth}x{gridHeight}");
     }
     
     /// <summary>
     /// 🚀 MAIN GRID CREATION - Uses raycasts to detect floor surfaces
-    /// Only creates walkable nodes where floor exists
+    /// ONLY creates nodes where valid floor exists, skips all others
     /// </summary>
     void CreateGrid()
     {
         grid = new Node[gridWidth, gridHeight];
+        validCells.Clear();
         walkableCells.Clear();
         
-        int totalCells = gridWidth * gridHeight;
-        int walkableCount = 0;
-        int floorHitCount = 0;
+        int totalScanned = gridWidth * gridHeight;
+        int validCount = 0;
+        int skipCount = 0;
         
-        LogDebug($"Starting grid generation: Scanning {totalCells} cells...");
+        LogDebug($"Starting grid generation: Scanning {totalScanned} potential cells...");
         
-        // Scan each grid cell with downward raycast
+        // Scan each grid position with downward raycast
         for (int x = 0; x < gridWidth; x++)
         {
             for (int z = 0; z < gridHeight; z++)
             {
-                // Calculate world position for this grid cell (at raycast start height)
-                Vector3 raycastStart = gridOrigin + new Vector3(
-                    x * nodeSpacing + (nodeSpacing * 0.5f),  // Center of cell
-                    raycastHeight,
-                    z * nodeSpacing + (nodeSpacing * 0.5f)   // Center of cell
+                // Calculate cell center position at ground level
+                Vector3 cellCenter = gridOrigin + new Vector3(
+                    x * nodeSpacing + (nodeSpacing * 0.5f),
+                    0f,
+                    z * nodeSpacing + (nodeSpacing * 0.5f)
                 );
+                
+                // Calculate raycast start height (adaptive for stairs)
+                float actualStartHeight = raycastStartOffset;
+                
+                if (useAdaptiveHeight && autoDetectBounds && labyrinthParent != null)
+                {
+                    // Use higher start point to catch stairs/elevated surfaces
+                    actualStartHeight = raycastStartOffset + adaptiveHeightBonus;
+                }
+                
+                // Raycast from calculated height above this cell position
+                Vector3 raycastStart = cellCenter + Vector3.up * actualStartHeight;
                 
                 // Perform downward raycast to detect floor
                 RaycastHit hit;
                 bool hitSomething = Physics.Raycast(raycastStart, Vector3.down, out hit, raycastMaxDistance);
                 
-                // Debug untuk beberapa cell pertama
+                // Debug sample raycasts
                 if ((x == 0 && z == 0) || (x == gridWidth/2 && z == gridHeight/2))
                 {
                     if (hitSomething)
                     {
-                        Debug.Log($"[GridBuilder] Sample raycast [{x},{z}]: HIT {hit.collider.name} at {hit.point}, Tag={hit.collider.tag}, Layer={LayerMask.LayerToName(hit.collider.gameObject.layer)}");
+                        Debug.Log($"[GridBuilder] Sample raycast [{x},{z}]: HIT {hit.collider.name} at {hit.point}, Tag={hit.collider.tag}");
                     }
                     else
                     {
@@ -180,65 +199,30 @@ public class GridBuilder : MonoBehaviour
                     }
                 }
                 
-                if (hitSomething)
+                // Check if hit is valid floor
+                if (hitSomething && IsValidFloor(hit))
                 {
-                    // Check if this is a valid floor based on detection method
-                    bool isValidFloor = false;
+                    // ✓ Valid floor found! Create node and add to valid cells
+                    Vector3 floorPosition = hit.point;
                     
-                    switch (detectionMethod)
-                    {
-                        case DetectionMethod.UseTag:
-                            isValidFloor = hit.collider.CompareTag(floorTag);
-                            break;
-                            
-                        case DetectionMethod.UseLayerMask:
-                            isValidFloor = ((1 << hit.collider.gameObject.layer) & floorLayer) != 0;
-                            break;
-                            
-                        case DetectionMethod.UseBoth:
-                            bool hasTag = hit.collider.CompareTag(floorTag);
-                            bool onLayer = ((1 << hit.collider.gameObject.layer) & floorLayer) != 0;
-                            isValidFloor = hasTag || onLayer;
-                            break;
-                    }
+                    grid[x, z] = new Node(floorPosition);
+                    grid[x, z].isWalkable = true;
                     
-                    if (isValidFloor)
+                    validCells.Add(floorPosition);
+                    walkableCells.Add(floorPosition); // Alias for compatibility
+                    validCount++;
+                    
+                    // Debug first valid cell
+                    if (validCount == 1)
                     {
-                        // Valid floor found! Create walkable node at floor surface
-                        Vector3 floorPosition = hit.point;
-                        
-                        grid[x, z] = new Node(floorPosition);
-                        grid[x, z].isWalkable = true;
-                        
-                        walkableCells.Add(floorPosition);
-                        walkableCount++;
-                        floorHitCount++;
-                        
-                        // Debug first valid floor
-                        if (walkableCount == 1)
-                        {
-                            Debug.Log($"[GridBuilder] ✓ First valid floor found at [{x},{z}]: {hit.collider.name}, Position={floorPosition}");
-                        }
-                    }
-                    else
-                    {
-                        // Hit something but not a valid floor
-                        grid[x, z] = new Node(hit.point);
-                        grid[x, z].isWalkable = false;
-                        
-                        // Debug first non-floor hit
-                        if (walkableCount == 0 && floorHitCount == 0)
-                        {
-                            Debug.LogWarning($"[GridBuilder] ⚠️ Hit non-floor object '{hit.collider.name}' (Tag={hit.collider.tag}, Layer={LayerMask.LayerToName(hit.collider.gameObject.layer)})");
-                        }
+                        Debug.Log($"[GridBuilder] ✓ First valid cell at [{x},{z}]: {hit.collider.name}, Position={floorPosition}");
                     }
                 }
                 else
                 {
-                    // No hit at all - create unwalkable node
-                    Vector3 defaultPos = gridOrigin + new Vector3(x * nodeSpacing, 0, z * nodeSpacing);
-                    grid[x, z] = new Node(defaultPos);
-                    grid[x, z].isWalkable = false;
+                    // ✗ No valid floor - leave grid cell as NULL (don't create node)
+                    grid[x, z] = null;
+                    skipCount++;
                 }
             }
         }
@@ -247,33 +231,55 @@ public class GridBuilder : MonoBehaviour
         ConnectNeighbors();
         
         // Log results
-        float successRate = (walkableCount / (float)totalCells) * 100f;
+        float coverageRate = (validCount / (float)totalScanned) * 100f;
         LogDebug($"✓ Grid generation complete:");
-        LogDebug($"  - Scanned: {totalCells} cells ({gridWidth}x{gridHeight})");
-        LogDebug($"  - Walkable: {walkableCount} cells ({successRate:F1}%)");
-        LogDebug($"  - Floor hits: {floorHitCount}");
-        LogDebug($"  - Non-floor: {totalCells - walkableCount}");
+        LogDebug($"  - Scanned: {totalScanned} positions ({gridWidth}x{gridHeight})");
+        LogDebug($"  - Valid cells: {validCount} ({coverageRate:F1}%)");
+        LogDebug($"  - Skipped: {skipCount} (no floor detected)");
         
-        if (walkableCount == 0)
+        if (validCount == 0)
         {
-            Debug.LogError("[GridBuilder] ⚠️⚠️⚠️ NO WALKABLE CELLS FOUND!");
+            Debug.LogError("[GridBuilder] ⚠️⚠️⚠️ NO VALID CELLS FOUND!");
             Debug.LogError($"[GridBuilder] Detection method: {detectionMethod}");
             if (detectionMethod == DetectionMethod.UseTag || detectionMethod == DetectionMethod.UseBoth)
                 Debug.LogError($"[GridBuilder] Floor Tag: '{floorTag}' - Make sure floor objects have this tag!");
             if (detectionMethod == DetectionMethod.UseLayerMask || detectionMethod == DetectionMethod.UseBoth)
                 Debug.LogError($"[GridBuilder] Floor Layer: {floorLayer.value} - Make sure floor objects are on this layer!");
-            Debug.LogError($"[GridBuilder] Raycast: Start Y={raycastHeight}, MaxDistance={raycastMaxDistance}");
+            Debug.LogError($"[GridBuilder] Raycast: Start offset={raycastStartOffset}, MaxDistance={raycastMaxDistance}");
             Debug.LogError($"[GridBuilder] Grid: Origin={gridOrigin}, Size={gridWidth}x{gridHeight}, Spacing={nodeSpacing}");
-            Debug.LogError($"[GridBuilder] Total raycasts performed: {totalCells}");
         }
-        else if (walkableCount < 10)
+        else if (validCount < 10)
         {
-            Debug.LogWarning($"[GridBuilder] ⚠️ Only {walkableCount} walkable cells found - might be too few for spawning!");
+            Debug.LogWarning($"[GridBuilder] ⚠️ Only {validCount} valid cells found - might be too few for spawning!");
         }
     }
     
     /// <summary>
-    /// Connect walkable nodes to their walkable neighbors (4-directional)
+    /// Check if raycast hit is a valid floor based on detection method
+    /// </summary>
+    bool IsValidFloor(RaycastHit hit)
+    {
+        switch (detectionMethod)
+        {
+            case DetectionMethod.UseTag:
+                return hit.collider.CompareTag(floorTag);
+                
+            case DetectionMethod.UseLayerMask:
+                return ((1 << hit.collider.gameObject.layer) & floorLayer) != 0;
+                
+            case DetectionMethod.UseBoth:
+                bool hasTag = hit.collider.CompareTag(floorTag);
+                bool onLayer = ((1 << hit.collider.gameObject.layer) & floorLayer) != 0;
+                return hasTag || onLayer;
+                
+            default:
+                return false;
+        }
+    }
+    
+    /// <summary>
+    /// Connect valid nodes to their valid neighbors (4-directional)
+    /// Only connects nodes that exist (non-null)
     /// </summary>
     void ConnectNeighbors()
     {
@@ -281,25 +287,26 @@ public class GridBuilder : MonoBehaviour
         {
             for (int z = 0; z < gridHeight; z++)
             {
-                if (grid[x, z] == null || !grid[x, z].isWalkable)
+                // Skip if no valid node exists at this position
+                if (grid[x, z] == null)
                     continue;
                 
                 List<Node> neighborsList = new List<Node>();
                 
                 // Right
-                if (x + 1 < gridWidth && grid[x + 1, z] != null && grid[x + 1, z].isWalkable)
+                if (x + 1 < gridWidth && grid[x + 1, z] != null)
                     neighborsList.Add(grid[x + 1, z]);
                 
                 // Left
-                if (x - 1 >= 0 && grid[x - 1, z] != null && grid[x - 1, z].isWalkable)
+                if (x - 1 >= 0 && grid[x - 1, z] != null)
                     neighborsList.Add(grid[x - 1, z]);
                 
                 // Up (Z+)
-                if (z + 1 < gridHeight && grid[x, z + 1] != null && grid[x, z + 1].isWalkable)
+                if (z + 1 < gridHeight && grid[x, z + 1] != null)
                     neighborsList.Add(grid[x, z + 1]);
                 
                 // Down (Z-)
-                if (z - 1 >= 0 && grid[x, z - 1] != null && grid[x, z - 1].isWalkable)
+                if (z - 1 >= 0 && grid[x, z - 1] != null)
                     neighborsList.Add(grid[x, z - 1]);
                 
                 grid[x, z].neighbors = neighborsList.ToArray();
@@ -310,21 +317,29 @@ public class GridBuilder : MonoBehaviour
     // ==================== PUBLIC API ====================
     
     /// <summary>
-    /// 🚀 Get random walkable position for spawning objects
-    /// Guarantees position is on actual floor surface inside labyrinth
+    /// 🚀 Get random valid cell for spawning objects
+    /// Returns a random position from ONLY valid floor cells
     /// </summary>
     /// <param name="heightOffset">Y-axis offset above floor (e.g., 0.5f for items, 1.0f for player)</param>
-    /// <returns>Valid spawn position, or Vector3.zero if no walkable cells exist</returns>
-    public Vector3 GetRandomWalkablePosition(float heightOffset = 0f)
+    /// <returns>Valid spawn position, or Vector3.zero if no valid cells exist</returns>
+    public Vector3 GetRandomValidCell(float heightOffset = 0f)
     {
-        if (walkableCells.Count == 0)
+        if (validCells.Count == 0)
         {
-            Debug.LogError("[GridBuilder] No walkable cells available! Cannot get random position.");
+            Debug.LogError("[GridBuilder] No valid cells available! Cannot get random position.");
             return Vector3.zero;
         }
         
-        Vector3 randomCell = walkableCells[Random.Range(0, walkableCells.Count)];
+        Vector3 randomCell = validCells[Random.Range(0, validCells.Count)];
         return randomCell + Vector3.up * heightOffset;
+    }
+    
+    /// <summary>
+    /// Alias for compatibility - same as GetRandomValidCell
+    /// </summary>
+    public Vector3 GetRandomWalkablePosition(float heightOffset = 0f)
+    {
+        return GetRandomValidCell(heightOffset);
     }
     
     /// <summary>
@@ -358,19 +373,35 @@ public class GridBuilder : MonoBehaviour
     }
     
     /// <summary>
-    /// Get all walkable positions (useful for debugging or advanced spawning)
+    /// Get all valid cell positions
     /// </summary>
-    public List<Vector3> GetAllWalkablePositions()
+    public List<Vector3> GetAllValidCells()
     {
-        return new List<Vector3>(walkableCells);
+        return new List<Vector3>(validCells);
     }
     
     /// <summary>
-    /// Get count of walkable cells
+    /// Alias for compatibility
+    /// </summary>
+    public List<Vector3> GetAllWalkablePositions()
+    {
+        return GetAllValidCells();
+    }
+    
+    /// <summary>
+    /// Get count of valid cells
+    /// </summary>
+    public int GetValidCellCount()
+    {
+        return validCells.Count;
+    }
+    
+    /// <summary>
+    /// Alias for compatibility
     /// </summary>
     public int GetWalkableCellCount()
     {
-        return walkableCells.Count;
+        return GetValidCellCount();
     }
     
     /// <summary>
@@ -393,40 +424,42 @@ public class GridBuilder : MonoBehaviour
     
     void OnDrawGizmos()
     {
-        if (!showGizmos || grid == null) return;
+        if (!showGizmos) return;
         
-        // Draw all grid cells
-        for (int x = 0; x < gridWidth; x++)
+        // Draw ONLY valid cells (green dots)
+        if (validCells != null && validCells.Count > 0)
         {
-            for (int z = 0; z < gridHeight; z++)
+            Gizmos.color = walkableColor;
+            foreach (Vector3 cell in validCells)
             {
-                if (grid[x, z] == null) continue;
-                
-                bool isWalkable = grid[x, z].isWalkable;
-                
-                // Skip unwalkable if only showing walkable
-                if (!isWalkable && showOnlyWalkable) continue;
-                
-                Gizmos.color = isWalkable ? walkableColor : unwalkableColor;
-                Gizmos.DrawCube(grid[x, z].position + Vector3.up * 0.1f, Vector3.one * gizmoSize);
-                
-                // Draw neighbor connections for walkable nodes
-                if (isWalkable && grid[x, z].neighbors != null)
+                Gizmos.DrawSphere(cell + Vector3.up * 0.1f, gizmoSize);
+            }
+        }
+        
+        // Draw neighbor connections if grid exists
+        if (grid != null && !showOnlyWalkable)
+        {
+            Gizmos.color = new Color(0, 1, 1, 0.2f);
+            for (int x = 0; x < gridWidth; x++)
+            {
+                for (int z = 0; z < gridHeight; z++)
                 {
-                    Gizmos.color = new Color(0, 1, 1, 0.2f);
-                    foreach (Node neighbor in grid[x, z].neighbors)
+                    if (grid[x, z] != null && grid[x, z].neighbors != null)
                     {
-                        if (neighbor != null)
+                        foreach (Node neighbor in grid[x, z].neighbors)
                         {
-                            Gizmos.DrawLine(grid[x, z].position, neighbor.position);
+                            if (neighbor != null)
+                            {
+                                Gizmos.DrawLine(grid[x, z].position, neighbor.position);
+                            }
                         }
                     }
                 }
             }
         }
         
-        // Draw grid bounds
-        Gizmos.color = Color.yellow;
+        // Draw scan area bounds (yellow wireframe)
+        Gizmos.color = new Color(1, 1, 0, 0.3f);
         Vector3 center = gridOrigin + new Vector3(gridWidth * nodeSpacing * 0.5f, 0, gridHeight * nodeSpacing * 0.5f);
         Vector3 size = new Vector3(gridWidth * nodeSpacing, 0.1f, gridHeight * nodeSpacing);
         Gizmos.DrawWireCube(center, size);
@@ -436,15 +469,20 @@ public class GridBuilder : MonoBehaviour
     {
         if (!showGizmos) return;
         
-        // Draw raycast visualization when selected
-        Gizmos.color = new Color(1, 1, 0, 0.1f);
+        // Draw sample raycast lines when selected
+        Gizmos.color = new Color(1, 1, 0, 0.15f);
         
-        // Show a few sample raycasts
-        for (int x = 0; x < gridWidth; x += Mathf.Max(1, gridWidth / 10))
+        int step = Mathf.Max(1, gridWidth / 10);
+        for (int x = 0; x < gridWidth; x += step)
         {
-            for (int z = 0; z < gridHeight; z += Mathf.Max(1, gridHeight / 10))
+            for (int z = 0; z < gridHeight; z += step)
             {
-                Vector3 rayStart = gridOrigin + new Vector3(x * nodeSpacing, raycastHeight, z * nodeSpacing);
+                Vector3 cellCenter = gridOrigin + new Vector3(
+                    x * nodeSpacing + (nodeSpacing * 0.5f),
+                    0f,
+                    z * nodeSpacing + (nodeSpacing * 0.5f)
+                );
+                Vector3 rayStart = cellCenter + Vector3.up * raycastStartOffset;
                 Vector3 rayEnd = rayStart + Vector3.down * raycastMaxDistance;
                 Gizmos.DrawLine(rayStart, rayEnd);
             }

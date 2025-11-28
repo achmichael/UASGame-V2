@@ -70,14 +70,14 @@ public class LabyrinthSpawnManager : MonoBehaviour
         if (gridBuilder == null)
             gridBuilder = FindObjectOfType<GridBuilder>();
             
-        // Validate GridBuilder has generated walkable cells
-        if (gridBuilder != null && gridBuilder.walkableCells.Count > 0)
+        // Validate GridBuilder has generated valid cells
+        if (gridBuilder != null && gridBuilder.validCells.Count > 0)
         {
-            Debug.Log($"[SpawnManager] ✓ GridBuilder has {gridBuilder.walkableCells.Count} walkable cells ready for spawning");
+            Debug.Log($"[SpawnManager] ✓ GridBuilder has {gridBuilder.validCells.Count} valid cells ready for spawning");
         }
         else
         {
-            Debug.LogError("[SpawnManager] ⚠️ GridBuilder has no walkable cells! Cannot spawn objects.");
+            Debug.LogError("[SpawnManager] ⚠️ GridBuilder has no valid cells! Cannot spawn objects.");
         }
         
         // Auto spawn if enabled
@@ -137,8 +137,8 @@ public class LabyrinthSpawnManager : MonoBehaviour
     }
     
     /// <summary>
-    /// 🚀 UPDATED: Get a random valid tile position using GridBuilder's raycast-based system
-    /// Now uses GridBuilder.GetRandomWalkablePosition() for guaranteed floor-only spawning
+    /// 🚀 Get a random valid tile position using GridBuilder's raycast-based system
+    /// Uses GridBuilder.GetRandomValidCell() for guaranteed floor-only spawning
     /// </summary>
     /// <param name="heightOffset">Y-axis offset from ground (e.g., 0.5f for items, 1.0f for player)</param>
     /// <param name="minDistanceFromOthers">Minimum distance from already spawned objects</param>
@@ -152,17 +152,17 @@ public class LabyrinthSpawnManager : MonoBehaviour
             return Vector3.zero;
         }
         
-        if (gridBuilder.walkableCells.Count == 0)
+        if (gridBuilder.validCells.Count == 0)
         {
-            Debug.LogError("[SpawnManager] No walkable cells in GridBuilder! Ensure floors are tagged correctly.");
+            Debug.LogError("[SpawnManager] No valid cells in GridBuilder! Ensure floors are tagged correctly.");
             return Vector3.zero;
         }
         
         // Try multiple times to find a position meeting distance requirements
         for (int attempt = 0; attempt < maxDistanceAttempts; attempt++)
         {
-            // Get random walkable position from GridBuilder (raycast-verified floor position)
-            Vector3 spawnPos = gridBuilder.GetRandomWalkablePosition(heightOffset);
+            // Get random valid position from GridBuilder (raycast-verified floor position)
+            Vector3 spawnPos = gridBuilder.GetRandomValidCell(heightOffset);
             
             if (spawnPos == Vector3.zero)
             {
@@ -189,7 +189,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         // This prevents spawn failures when maze is small or crowded
         if (allowFallbackSpawn)
         {
-            Vector3 fallbackPos = gridBuilder.GetRandomWalkablePosition(heightOffset);
+            Vector3 fallbackPos = gridBuilder.GetRandomValidCell(heightOffset);
             
             LogDebug($"Using fallback spawn (distance requirements couldn't be met after {maxDistanceAttempts} attempts)");
             return fallbackPos;
@@ -204,9 +204,9 @@ public class LabyrinthSpawnManager : MonoBehaviour
     /// </summary>
     public void SpawnAllObjects()
     {
-        if (gridBuilder == null || gridBuilder.walkableCells.Count == 0)
+        if (gridBuilder == null || gridBuilder.validCells.Count == 0)
         {
-            Debug.LogError("[SpawnManager] Cannot spawn - GridBuilder has no walkable cells! Ensure floors are tagged 'Floor'.");
+            Debug.LogError("[SpawnManager] Cannot spawn - GridBuilder has no valid cells! Ensure floors are tagged 'Floor'.");
             return;
         }
         
@@ -415,7 +415,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         if (gridBuilder != null)
         {
             gridBuilder.RefreshGrid();
-            Debug.Log($"[SpawnManager] Grid refreshed: {gridBuilder.walkableCells.Count} walkable cells available");
+            Debug.Log($"[SpawnManager] Grid refreshed: {gridBuilder.validCells.Count} valid cells available");
         }
     }
     

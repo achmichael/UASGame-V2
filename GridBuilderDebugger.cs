@@ -64,24 +64,24 @@ public class GridBuilderDebugger : MonoBehaviour
         Debug.Log($"  - Grid Size: {gridBuilder.gridWidth} x {gridBuilder.gridHeight}");
         Debug.Log($"  - Node Spacing: {gridBuilder.nodeSpacing}");
         Debug.Log($"  - Grid Origin: {gridBuilder.transform.position}");
-        Debug.Log($"  - Raycast Height: {gridBuilder.raycastHeight}");
+        Debug.Log($"  - Raycast Start Offset: {gridBuilder.raycastStartOffset}");
         Debug.Log($"  - Floor Tag: '{gridBuilder.floorTag}'");
         
-        int walkableCount = gridBuilder.GetWalkableCellCount();
-        Debug.Log($"  - Walkable Cells: {walkableCount}");
+        int validCount = gridBuilder.GetValidCellCount();
+        Debug.Log($"  - Valid Cells: {validCount}");
         
-        if (walkableCount == 0)
+        if (validCount == 0)
         {
-            Debug.LogError("❌ NO WALKABLE CELLS! Grid tidak bisa spawn object!");
+            Debug.LogError("❌ NO VALID CELLS! Grid tidak bisa spawn object!");
             Debug.LogError("   → Cek apakah floor sudah di-tag dengan benar");
         }
-        else if (walkableCount < 10)
+        else if (validCount < 10)
         {
-            Debug.LogWarning($"⚠️ Hanya {walkableCount} walkable cells - mungkin terlalu sedikit");
+            Debug.LogWarning($"⚠️ Hanya {validCount} valid cells - mungkin terlalu sedikit");
         }
         else
         {
-            Debug.Log($"✓ Grid OK - {walkableCount} valid spawn points");
+            Debug.Log($"✓ Grid OK - {validCount} valid spawn points");
         }
     }
     
@@ -176,15 +176,15 @@ public class GridBuilderDebugger : MonoBehaviour
     {
         Debug.Log("\n[4] TESTING SPAWN POSITIONS...");
         
-        if (gridBuilder.GetWalkableCellCount() == 0)
+        if (gridBuilder.GetValidCellCount() == 0)
         {
-            Debug.LogError("❌ Cannot test spawn - no walkable cells!");
+            Debug.LogError("❌ Cannot test spawn - no valid cells!");
             return;
         }
         
         for (int i = 0; i < 3; i++)
         {
-            Vector3 spawnPos = gridBuilder.GetRandomWalkablePosition(1f);
+            Vector3 spawnPos = gridBuilder.GetRandomValidCell(1f);
             
             if (spawnPos != Vector3.zero)
             {
@@ -211,7 +211,7 @@ public class GridBuilderDebugger : MonoBehaviour
         // Test raycast di tengah grid
         Vector3 centerPos = gridBuilder.transform.position + new Vector3(
             gridBuilder.gridWidth * gridBuilder.nodeSpacing * 0.5f,
-            gridBuilder.raycastHeight,
+            gridBuilder.raycastStartOffset,
             gridBuilder.gridHeight * gridBuilder.nodeSpacing * 0.5f
         );
         
@@ -268,7 +268,7 @@ public class GridBuilderDebugger : MonoBehaviour
         
         // Draw raycast height
         Gizmos.color = Color.cyan;
-        Vector3 raycastPlane = center + Vector3.up * gridBuilder.raycastHeight;
+        Vector3 raycastPlane = center + Vector3.up * gridBuilder.raycastStartOffset;
         Gizmos.DrawWireCube(raycastPlane, size * 0.5f);
     }
 }
