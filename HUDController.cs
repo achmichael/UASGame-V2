@@ -10,6 +10,8 @@ public class HUDController : MonoBehaviour
     public TextMeshProUGUI collectibleText;
     public TextMeshProUGUI livesText;
 
+
+
     public void UpdateHUD(int collected, int lives)
     {
         if (collectibleText != null)
@@ -18,4 +20,5 @@ public class HUDController : MonoBehaviour
         if (livesText != null)
             livesText.text = $"Health: {lives}";
     }
+
 }

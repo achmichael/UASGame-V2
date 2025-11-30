@@ -23,6 +23,10 @@ public class GameManager : MonoBehaviour
     public HUDController hudController;
     public GameObject ghostPrefab; // Assign Ghost prefab di Inspector
 
+    private bool isPaused = false;
+    private bool isPauseSceneLoaded = false;
+    private const string PauseScene = "Pause";
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -80,6 +84,12 @@ public class GameManager : MonoBehaviour
         }
 
         UpdateHUD();
+
+        // Start background music if AudioManager exists
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayMusic();
+        }
     }
 
     void ActivateGhosts(int count)
@@ -206,5 +216,46 @@ public class GameManager : MonoBehaviour
     {
         if (hudController != null)
             hudController.UpdateHUD(collectedCount, playerLives);
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (isPaused)
+            {
+                ResumeGame();
+            }
+            else
+            {
+                PauseGame();
+            }
+        }
+    }
+
+    public void ResumeGame()
+    {
+        if (!isPauseSceneLoaded) return;
+        SceneManager.UnloadSceneAsync(PauseScene);
+        Time.timeScale = 1f;
+        isPaused = false;
+        isPauseSceneLoaded = false;
+
+        // Resume background music when game resumes
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.ResumeMusic();
+    }
+
+    public void PauseGame()
+    {
+        if (isPauseSceneLoaded) return;
+        SceneManager.LoadScene(PauseScene, LoadSceneMode.Additive);
+        Time.timeScale = 0f;
+        isPaused = true;
+        isPauseSceneLoaded = true;
+
+        // Pause background music while paused
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PauseMusic();
     }
 }

@@ -10,6 +10,7 @@ public class GroundCheck : MonoBehaviour
         Debug.Log("Grounded");
         logicmovement.groundedchanger();
     }
+    
     void Start()
     {
         logicmovement = this.GetComponentInParent<MovementLogic>();
