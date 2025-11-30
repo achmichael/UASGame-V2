@@ -7,24 +7,30 @@ public class GhostAI : MonoBehaviour
     [Header("References")]
     public Transform player;
     public GridBuilder gridBuilder;
+    public Animator animator; // Referensi ke Animator
+    private PlayerHealth playerHealth; // Referensi ke PlayerHealth untuk serangan
 
     [Header("AI Settings")]
     public float chaseRange = 12f;
+    public float attackRange = 1.5f; // Jarak untuk memicu serangan
     public float moveSpeed = 4f;
     public float nodeReachThreshold = 0.1f;
-    public float pathUpdateInterval = 0.5f;  // Update path setiap 0.5 detik
+    public float pathUpdateInterval = 0.5f;
+    public float attackCooldown = 1f; // Cooldown antara serangan
+    public int attackDamage = 10; // Damage per serangan
 
     [Header("States")]
     public bool isChasing = false;
+    public bool isAttacking = false;
 
     // Pathfinding
     private List<Node> currentPath;
     private int currentPathIndex = 0;
     private float lastPathUpdateTime;
+    private float lastAttackTime;
 
     void Start()
     {
-
         int difficulty = PlayerPrefs.GetInt("Difficulty", 0);
 
         switch (difficulty)
@@ -41,8 +47,17 @@ public class GhostAI : MonoBehaviour
         if (gridBuilder == null)
             gridBuilder = FindObjectOfType<GridBuilder>();
 
+        if (animator == null)
+            animator = GetComponent<Animator>(); // Mencoba ambil dari object sendiri
+
+        if (player != null)
+            playerHealth = player.GetComponent<PlayerHealth>(); // Ambil PlayerHealth dari player
+
         if (gridBuilder == null)
             Debug.LogError("GridBuilder tidak ditemukan! Pastikan ada GameObject dengan GridBuilder script di scene.");
+
+        if (playerHealth == null)
+            Debug.LogError("PlayerHealth tidak ditemukan pada player! Pastikan player memiliki script PlayerHealth.");
     }
 
     void Update()
@@ -51,9 +66,35 @@ public class GhostAI : MonoBehaviour
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
-        // Check apakah player dalam chase range
-        if (distanceToPlayer <= chaseRange)
+        // --- LOGIKA STATE ANIMASI & AI ---
+
+        // 1. Cek Attack (Prioritas Tertinggi)
+        if (distanceToPlayer <= attackRange)
         {
+            isAttacking = true;
+            isChasing = false;
+            
+            // Stop pergerakan saat menyerang
+            currentPath = null; 
+            
+            // Serang player jika cooldown habis
+            if (Time.time - lastAttackTime > attackCooldown)
+            {
+                if (playerHealth != null)
+                {
+                    playerHealth.TakeDamage(attackDamage);
+                    Debug.Log("Ghost menyerang player!");
+                }
+                lastAttackTime = Time.time;
+            }
+            
+            // Update Animasi ke Attack
+            SetAnimationState(false, false, false, true);
+        }
+        // 2. Cek Chase/Run (Jika dalam jangkauan tapi belum cukup dekat untuk attack)
+        else if (distanceToPlayer <= chaseRange)
+        {
+            isAttacking = false;
             isChasing = true;
 
             // Update path secara periodik
@@ -63,14 +104,37 @@ public class GhostAI : MonoBehaviour
                 lastPathUpdateTime = Time.time;
             }
 
-            // Follow path
             FollowPath();
+
+            // Update Animasi ke Run (karena sedang mengejar)
+            // Jika Anda ingin Walk saat speed pelan, bisa ubah logika ini
+            SetAnimationState(false, false, true, false);
         }
+        // 3. Idle (Di luar jangkauan)
         else
         {
+            isAttacking = false;
             isChasing = false;
             currentPath = null;
+
+            // Update Animasi ke Idle
+            SetAnimationState(true, false, false, false);
         }
+    }
+
+    // Fungsi Helper untuk mengatur Animator Boolean agar rapi dan tidak tumpang tindih
+    void SetAnimationState(bool idle, bool walk, bool run, bool attack)
+    {
+        Debug.Log("Value of animator: " + animator);
+        if (animator == null) return;
+
+        animator.SetBool("Idle", idle);
+        animator.SetBool("Walk", walk);
+        animator.SetBool("Run", run);
+        animator.SetBool("Attack", attack);
+
+        // Debug.Log($"[GhostAI] Animation State - Idle: {idle}, Walk: {walk}, Run: {run}, Attack: {attack}");
+        Debug.Log("Value of each state from animator: " + animator.GetBool("Idle") + animator.GetBool("Walk") + animator.GetBool("Run") + animator.GetBool("Attack"));
     }
 
     void FindPathToPlayer()
@@ -84,7 +148,6 @@ public class GhostAI : MonoBehaviour
             return;
         }
 
-        // Dijkstra Algorithm
         currentPath = Dijkstra(startNode, targetNode);
         currentPathIndex = 0;
     }
@@ -95,9 +158,10 @@ public class GhostAI : MonoBehaviour
         Dictionary<Node, Node> previous = new Dictionary<Node, Node>();
         List<Node> unvisited = new List<Node>();
 
-        // Initialize
         foreach (Node node in gridBuilder.grid)
         {
+            if (node == null) continue;
+
             distances[node] = float.MaxValue;
             unvisited.Add(node);
         }
@@ -105,7 +169,6 @@ public class GhostAI : MonoBehaviour
 
         while (unvisited.Count > 0)
         {
-            // Find node with smallest distance
             Node current = null;
             float smallestDistance = float.MaxValue;
             foreach (Node node in unvisited)
@@ -122,7 +185,6 @@ public class GhostAI : MonoBehaviour
 
             unvisited.Remove(current);
 
-            // Check neighbors
             if (current.neighbors != null)
             {
                 foreach (Node neighbor in current.neighbors)
@@ -141,7 +203,6 @@ public class GhostAI : MonoBehaviour
             }
         }
 
-        // Reconstruct path
         List<Node> path = new List<Node>();
         Node temp = target;
 
@@ -159,7 +220,6 @@ public class GhostAI : MonoBehaviour
     {
         if (currentPath == null || currentPath.Count == 0) return;
 
-        // Check jika sudah sampai di akhir path
         if (currentPathIndex >= currentPath.Count)
         {
             currentPath = null;
@@ -169,10 +229,8 @@ public class GhostAI : MonoBehaviour
         Node targetNode = currentPath[currentPathIndex];
         Vector3 targetPosition = new Vector3(targetNode.position.x, transform.position.y, targetNode.position.z);
 
-        // Move ke target node
         transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
 
-        // Rotate ke arah target
         Vector3 direction = (targetPosition - transform.position).normalized;
         if (direction != Vector3.zero)
         {
@@ -180,14 +238,12 @@ public class GhostAI : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
         }
 
-        // Check jika sudah sampai di node
         if (Vector3.Distance(transform.position, targetPosition) < nodeReachThreshold)
         {
             currentPathIndex++;
         }
     }
 
-    // Visualisasi path di Scene view
     void OnDrawGizmosSelected()
     {
         if (currentPath != null && currentPath.Count > 0)
@@ -199,8 +255,11 @@ public class GhostAI : MonoBehaviour
             }
         }
 
-        // Draw chase range
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, chaseRange);
+
+        // Visualisasi Attack Range
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
     }
 }

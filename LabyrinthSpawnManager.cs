@@ -30,7 +30,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
     [Header("Enemy Spawn")]
     public GameObject enemyPrefab;
     public int enemyCount = 3;
-    public float enemySpawnHeight = 0.5f;
+    public float enemySpawnHeight = 1.0f;
     
     [Header("Advanced Settings")]
     [Tooltip("Maximum attempts to find position meeting distance requirements")]

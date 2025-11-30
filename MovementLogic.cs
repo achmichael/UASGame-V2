@@ -27,6 +27,9 @@ public class MovementLogic : MonoBehaviour
     private bool grounded = true;
     private bool aerialBoost = true;
     
+    [Header("Stair Settings")]
+    public bool isOnStair = false;
+    
     [Header("Drag Settings")]
     public float groundDrag = 6f;
     public float airDrag = 2f;
@@ -207,6 +210,13 @@ public class MovementLogic : MonoBehaviour
     /// </summary>
     void CheckGroundedRaycast()
     {
+        // Always grounded on stairs
+        if (isOnStair)
+        {
+            grounded = true;
+            return;
+        }
+        
         RaycastHit hit;
         bool wasGrounded = grounded;
         
@@ -361,10 +371,47 @@ public class MovementLogic : MonoBehaviour
     }
     
     /// <summary>
+    /// PUBLIC: Set stair state - dipanggil dari StairClimber
+    /// </summary>
+    public void SetOnStair(bool value)
+    {
+        isOnStair = value;
+        
+        if (isOnStair)
+        {
+            // Disable gravity saat di tangga
+            rb.useGravity = false;
+            grounded = true; // Treat stairs as ground
+            
+            if (showDebugInfo)
+            {
+                Debug.Log("[MovementLogic] On stair - gravity disabled");
+            }
+        }
+        else
+        {
+            // Re-enable gravity
+            rb.useGravity = true;
+            
+            if (showDebugInfo)
+            {
+                Debug.Log("[MovementLogic] Off stair - gravity enabled");
+            }
+        }
+    }
+    
+    /// <summary>
     /// Alternative: Gunakan OnCollisionStay untuk ground detection
     /// </summary>
     void OnCollisionStay(Collision collision)
     {
+        // Don't override ground state if on stairs
+        if (isOnStair)
+        {
+            grounded = true;
+            return;
+        }
+        
         // Check if colliding with ground
         if (!useRaycastGroundCheck)
         {
@@ -386,7 +433,7 @@ public class MovementLogic : MonoBehaviour
     
     void OnCollisionExit(Collision collision)
     {
-        if (!useRaycastGroundCheck)
+        if (!useRaycastGroundCheck && !isOnStair)
         {
             // Check if we left the ground
             grounded = false;
