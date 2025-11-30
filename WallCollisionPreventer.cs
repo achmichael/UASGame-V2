@@ -20,7 +20,6 @@ public class WallCollisionPreventer : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         lastValidPosition = transform.position;
         
-        // PENTING: Freeze rotation untuk mencegah berputar
         if (rb != null)
         {
             rb.freezeRotation = true;
