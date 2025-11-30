@@ -24,7 +24,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
     
     [Header("Item Spawn")]
     public GameObject itemPrefab;
-    public int itemCount = 30;
+    public int itemCount = 5;
     public float itemSpawnHeight = 0.5f;
     
     [Header("Enemy Spawn")]
