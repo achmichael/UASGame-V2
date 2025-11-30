@@ -1,19 +1,9 @@
-// LabyrinthSpawnManager.cs - OPTIMIZED GRID-BASED VERSION
-// Ensures ALL spawned objects (Player, Items, Enemies) only appear inside the maze
-// Uses pre-calculated walkable grid tiles for 100% accurate spawning
-//
-// KEY IMPROVEMENTS:
-// 1. Collects all walkable grid positions during initialization
-// 2. All spawns use GetRandomValidTile() - guarantees maze-only spawning
-// 3. No more random coordinate guessing or complex raycasts
-// 4. Player always spawns on valid maze tile
-// 5. Fast and reliable - uses cached tile list
-//
-// SETUP REQUIREMENTS:
-// - Assign GridBuilder reference
-// - Set Wall Layer and Ground Layer
-// - Ensure GridBuilder.grid is populated before spawning
-// - GridBuilder nodes must have isWalkable property set correctly
+// LabyrinthSpawnManager.cs - FIXED VERSION
+// Perbaikan:
+// 1. Mencegah double-spawning dengan flag isSpawned
+// 2. Distance check yang lebih ketat
+// 3. Validasi jumlah spawn yang lebih baik
+// 4. Debug logging untuk tracking spawn count
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -25,8 +15,8 @@ public class LabyrinthSpawnManager : MonoBehaviour
     public GridBuilder gridBuilder;
     
     [Header("Spawn Settings")]
-    public float minDistanceBetweenSpawns = 2f;
-    public float minDistanceFromPlayer = 10f;
+    public float minDistanceBetweenSpawns = 5f; // Dinaikkan dari 2f
+    public float minDistanceFromPlayer = 15f;   // Dinaikkan dari 10f
     
     [Header("Player Spawn")]
     public GameObject playerPrefab;
@@ -44,9 +34,9 @@ public class LabyrinthSpawnManager : MonoBehaviour
     
     [Header("Advanced Settings")]
     [Tooltip("Maximum attempts to find position meeting distance requirements")]
-    public int maxDistanceAttempts = 50;
+    public int maxDistanceAttempts = 100; // Dinaikkan dari 50
     [Tooltip("If true, guarantees spawn even if distance requirements can't be met")]
-    public bool allowFallbackSpawn = true;
+    public bool allowFallbackSpawn = false; // Ubah ke false untuk lebih strict
     
     [Header("Visualization")]
     public bool showGizmos = true;
@@ -58,10 +48,17 @@ public class LabyrinthSpawnManager : MonoBehaviour
     [Tooltip("Auto spawn on Start - Set false if GameManager triggers spawn")]
     public bool autoSpawnOnStart = false;
     
-    // Cached walkable tiles - the core of our optimization
-    private List<Vector3> walkableTiles = new List<Vector3>();
+    // Cached walkable tiles
     private List<Vector3> spawnedPositions = new List<Vector3>();
     private Vector3 playerSpawnPosition;
+    
+    // BARU: Flag untuk mencegah double spawning
+    private bool isSpawned = false;
+    
+    // BARU: Tracking actual spawned objects
+    private GameObject spawnedPlayer;
+    private List<GameObject> spawnedItems = new List<GameObject>();
+    private List<GameObject> spawnedEnemies = new List<GameObject>();
     
     void Start()
     {
@@ -70,7 +67,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         if (gridBuilder == null)
             gridBuilder = FindObjectOfType<GridBuilder>();
             
-        // Validate GridBuilder has generated valid cells
+        // Validate GridBuilder
         if (gridBuilder != null && gridBuilder.validCells.Count > 0)
         {
             Debug.Log($"[SpawnManager] ✓ GridBuilder has {gridBuilder.validCells.Count} valid cells ready for spawning");
@@ -88,15 +85,11 @@ public class LabyrinthSpawnManager : MonoBehaviour
         }
     }
     
-    /// <summary>
-    /// Validates that all required components are properly set up
-    /// </summary>
     void ValidateSetup()
     {
         if (gridBuilder == null)
         {
             Debug.LogError("[SpawnManager] ⚠️ GridBuilder NOT ASSIGNED! Cannot spawn objects.");
-            Debug.LogError("[SpawnManager] Assign GridBuilder in Inspector or ensure it exists in scene.");
         }
         
         if (playerPrefab == null)
@@ -105,12 +98,10 @@ public class LabyrinthSpawnManager : MonoBehaviour
         }
         else
         {
-            // Validate player has camera
             Camera cam = playerPrefab.GetComponentInChildren<Camera>();
             if (cam == null)
             {
                 Debug.LogError("[SpawnManager] ⚠️⚠️⚠️ PLAYER PREFAB HAS NO CAMERA!");
-                Debug.LogError("[SpawnManager] Add Camera as child to Player Prefab to avoid 'No cameras rendering' error.");
             }
             else
             {
@@ -126,115 +117,127 @@ public class LabyrinthSpawnManager : MonoBehaviour
     }
     
     /// <summary>
-    /// DEPRECATED - No longer needed, GridBuilder now provides walkableCells directly
-    /// Kept for reference only
+    /// Get random valid tile dengan distance checking yang lebih ketat
     /// </summary>
-    void CacheWalkableTiles()
-    {
-        // This method is no longer needed since GridBuilder.walkableCells
-        // already contains all walkable positions using raycast-based floor detection
-        // All spawning now uses GridBuilder.GetRandomWalkablePosition() directly
-    }
-    
-    /// <summary>
-    /// 🚀 Get a random valid tile position using GridBuilder's raycast-based system
-    /// Uses GridBuilder.GetRandomValidCell() for guaranteed floor-only spawning
-    /// </summary>
-    /// <param name="heightOffset">Y-axis offset from ground (e.g., 0.5f for items, 1.0f for player)</param>
-    /// <param name="minDistanceFromOthers">Minimum distance from already spawned objects</param>
-    /// <param name="minDistanceFromPlayer">Minimum distance from player (for enemies)</param>
-    /// <returns>World position on a valid maze tile, or Vector3.zero if no valid position found</returns>
     public Vector3 GetRandomValidTile(float heightOffset, float minDistanceFromOthers = 0f, float minDistanceFromPlayer = 0f)
     {
         if (gridBuilder == null)
         {
-            Debug.LogError("[SpawnManager] GridBuilder is null! Cannot get spawn position.");
+            Debug.LogError("[SpawnManager] GridBuilder is null!");
             return Vector3.zero;
         }
         
         if (gridBuilder.validCells.Count == 0)
         {
-            Debug.LogError("[SpawnManager] No valid cells in GridBuilder! Ensure floors are tagged correctly.");
+            Debug.LogError("[SpawnManager] No valid cells in GridBuilder!");
             return Vector3.zero;
         }
         
-        // Try multiple times to find a position meeting distance requirements
+        // Try multiple times dengan distance checking
         for (int attempt = 0; attempt < maxDistanceAttempts; attempt++)
         {
-            // Get random valid position from GridBuilder (raycast-verified floor position)
             Vector3 spawnPos = gridBuilder.GetRandomValidCell(heightOffset);
             
             if (spawnPos == Vector3.zero)
-            {
-                Debug.LogError("[SpawnManager] GridBuilder returned invalid position!");
                 continue;
-            }
             
-            // Check distance from other spawned objects
+            // Check distance dari semua spawned objects
             if (minDistanceFromOthers > 0f && IsTooCloseToOtherSpawns(spawnPos, minDistanceFromOthers))
                 continue;
             
-            // Check distance from player (for enemy spawns)
+            // Check distance dari player
             if (minDistanceFromPlayer > 0f && playerSpawnPosition != Vector3.zero)
             {
                 if (Vector3.Distance(spawnPos, playerSpawnPosition) < minDistanceFromPlayer)
                     continue;
             }
             
-            // Found valid position!
+            // Position valid!
             return spawnPos;
         }
         
-        // Fallback: If we can't meet distance requirements, return any valid position
-        // This prevents spawn failures when maze is small or crowded
+        // Fallback hanya jika allowFallbackSpawn = true
         if (allowFallbackSpawn)
         {
             Vector3 fallbackPos = gridBuilder.GetRandomValidCell(heightOffset);
-            
-            LogDebug($"Using fallback spawn (distance requirements couldn't be met after {maxDistanceAttempts} attempts)");
+            Debug.LogWarning($"[SpawnManager] Using fallback spawn (distance requirements couldn't be met)");
             return fallbackPos;
         }
         
+        // Jika tidak ada fallback, return zero
+        Debug.LogWarning($"[SpawnManager] No valid position found after {maxDistanceAttempts} attempts");
         return Vector3.zero;
     }
     
     /// <summary>
-    /// Spawn all game objects: Player, Items, and Enemies
-    /// Call this from GameManager or use autoSpawnOnStart
+    /// MAIN SPAWN FUNCTION - Dipanggil dari GameManager
+    /// Mencegah double spawning dengan flag
     /// </summary>
     public void SpawnAllObjects()
     {
-        if (gridBuilder == null || gridBuilder.validCells.Count == 0)
+        // CRITICAL: Cek apakah sudah pernah spawn
+        if (isSpawned)
         {
-            Debug.LogError("[SpawnManager] Cannot spawn - GridBuilder has no valid cells! Ensure floors are tagged 'Floor'.");
+            Debug.LogWarning("[SpawnManager] ⚠️ SpawnAllObjects() called but objects already spawned! Ignoring duplicate call.");
             return;
         }
         
-        spawnedPositions.Clear();
+        if (gridBuilder == null || gridBuilder.validCells.Count == 0)
+        {
+            Debug.LogError("[SpawnManager] Cannot spawn - GridBuilder has no valid cells!");
+            return;
+        }
         
-        // Spawn player first (other objects reference player position)
+        Debug.Log("=== [SpawnManager] STARTING SPAWN SEQUENCE ===");
+        
+        // Clear previous data
+        ClearSpawnedPositions();
+        
+        // 1. Spawn Player
         if (playerPrefab != null)
+        {
             SpawnPlayer();
+        }
         else
+        {
             Debug.LogError("[SpawnManager] Cannot spawn player - prefab not assigned!");
+        }
         
-        // Spawn items
+        // 2. Spawn Items
         if (itemPrefab != null)
+        {
             SpawnItems(itemCount);
+        }
         
-        // Spawn enemies (they avoid player spawn position)
+        // 3. Spawn Enemies
         if (enemyPrefab != null)
+        {
             SpawnEnemies(enemyCount);
-            
-        Debug.Log($"[SpawnManager] ✓ Spawn complete: 1 Player, {spawnedPositions.Count - 1} Items/Enemies spawned");
+        }
+        
+        // Set flag untuk mencegah double spawn
+        isSpawned = true;
+        
+        // Final report
+        Debug.Log($"=== [SpawnManager] SPAWN COMPLETE ===");
+        Debug.Log($"Player: {(spawnedPlayer != null ? "1" : "0")}");
+        Debug.Log($"Items: {spawnedItems.Count}/{itemCount}");
+        Debug.Log($"Enemies: {spawnedEnemies.Count}/{enemyCount}");
+        Debug.Log($"Total Objects: {spawnedPositions.Count}");
     }
     
     /// <summary>
-    /// Spawn the player on a random valid maze tile
-    /// Guaranteed to spawn inside maze using cached walkable tiles
+    /// Spawn player - hanya spawn 1 player
     /// </summary>
     void SpawnPlayer()
     {
+        // Cek apakah player sudah ada
+        if (spawnedPlayer != null)
+        {
+            Debug.LogWarning("[SpawnManager] Player already spawned! Skipping.");
+            return;
+        }
+        
         Vector3 spawnPos = GetRandomValidTile(playerSpawnHeight);
         
         if (spawnPos == Vector3.zero)
@@ -243,104 +246,136 @@ public class LabyrinthSpawnManager : MonoBehaviour
             return;
         }
         
-        GameObject player = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
-        player.tag = "Player";
-        player.name = "Player";
+        spawnedPlayer = Instantiate(playerPrefab, spawnPos, Quaternion.identity);
+        spawnedPlayer.tag = "Player";
+        spawnedPlayer.name = "Player";
         
         playerSpawnPosition = spawnPos;
         spawnedPositions.Add(spawnPos);
         
-        LogDebug($"✓ Player spawned at {spawnPos} (on valid maze tile)");
+        Debug.Log($"[SpawnManager] ✓ Player spawned at {spawnPos}");
     }
     
     /// <summary>
-    /// Spawn multiple items on random valid maze tiles
-    /// Each item maintains minimum distance from others
+    /// Spawn items dengan jumlah yang exact
     /// </summary>
     public void SpawnItems(int count)
     {
-        int spawned = 0;
+        Debug.Log($"[SpawnManager] Spawning {count} items...");
+        
+        int successfulSpawns = 0;
+        int failedAttempts = 0;
+        int maxFailures = count * 2; // Batas maksimal kegagalan
         
         for (int i = 0; i < count; i++)
         {
+            if (failedAttempts >= maxFailures)
+            {
+                Debug.LogWarning($"[SpawnManager] Stopped spawning items after {maxFailures} failed attempts");
+                break;
+            }
+            
             Vector3 spawnPos = GetRandomValidTile(itemSpawnHeight, minDistanceBetweenSpawns);
             
             if (spawnPos == Vector3.zero)
             {
-                Debug.LogWarning($"[SpawnManager] Could not spawn item {i + 1}/{count} (no valid position)");
+                Debug.LogWarning($"[SpawnManager] Failed to spawn item {i + 1}/{count} - no valid position");
+                failedAttempts++;
+                i--; // Coba lagi untuk index ini
                 continue;
             }
             
             GameObject item = Instantiate(itemPrefab, spawnPos, Quaternion.identity);
-            item.name = $"Item_{spawned + 1}";
+            item.name = $"Item_{successfulSpawns + 1}";
             
             spawnedPositions.Add(spawnPos);
-            spawned++;
+            spawnedItems.Add(item);
+            successfulSpawns++;
+            
+            LogDebug($"Item {successfulSpawns}/{count} spawned at {spawnPos}");
         }
         
-        LogDebug($"✓ Spawned {spawned}/{count} items (all on valid maze tiles)");
+        Debug.Log($"[SpawnManager] ✓ Items spawned: {successfulSpawns}/{count}");
         
-        if (spawned < count)
+        if (successfulSpawns < count)
         {
-            Debug.LogWarning($"[SpawnManager] Only spawned {spawned}/{count} items. Try reducing minDistanceBetweenSpawns or spawn count.");
+            Debug.LogWarning($"[SpawnManager] Only spawned {successfulSpawns}/{count} items.");
+            Debug.LogWarning($"Try: reducing minDistanceBetweenSpawns ({minDistanceBetweenSpawns}f) or itemCount");
         }
     }
     
     /// <summary>
-    /// Spawn multiple enemies on random valid maze tiles
-    /// Enemies maintain distance from player and from each other
+    /// Spawn enemies dengan jumlah yang exact
     /// </summary>
     public void SpawnEnemies(int count)
     {
-        int spawned = 0;
+        Debug.Log($"[SpawnManager] Spawning {count} enemies...");
+        
+        int successfulSpawns = 0;
+        int failedAttempts = 0;
+        int maxFailures = count * 3; // Lebih banyak toleransi untuk enemy
         
         for (int i = 0; i < count; i++)
         {
-            // Enemies need to be far from player and from each other
+            if (failedAttempts >= maxFailures)
+            {
+                Debug.LogWarning($"[SpawnManager] Stopped spawning enemies after {maxFailures} failed attempts");
+                break;
+            }
+            
+            // Enemy butuh jarak lebih jauh dari player dan sesama enemy
             Vector3 spawnPos = GetRandomValidTile(
                 enemySpawnHeight, 
-                minDistanceBetweenSpawns * 2f,  // Extra spacing between enemies
-                minDistanceFromPlayer            // Keep away from player
+                minDistanceBetweenSpawns * 2f,  // Extra spacing antar enemy
+                minDistanceFromPlayer            // Jauh dari player
             );
             
             if (spawnPos == Vector3.zero)
             {
-                Debug.LogWarning($"[SpawnManager] Could not spawn enemy {i + 1}/{count} (no valid position)");
+                Debug.LogWarning($"[SpawnManager] Failed to spawn enemy {i + 1}/{count} - no valid position");
+                failedAttempts++;
+                i--; // Coba lagi
                 continue;
             }
             
             GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
             enemy.tag = "Ghost";
-            enemy.name = $"Ghost_{spawned + 1}";
+            enemy.name = $"Ghost_{successfulSpawns + 1}";
             
             spawnedPositions.Add(spawnPos);
-            spawned++;
+            spawnedEnemies.Add(enemy);
+            successfulSpawns++;
+            
+            LogDebug($"Enemy {successfulSpawns}/{count} spawned at {spawnPos}");
         }
         
-        LogDebug($"✓ Spawned {spawned}/{count} enemies (all on valid maze tiles, away from player)");
+        Debug.Log($"[SpawnManager] ✓ Enemies spawned: {successfulSpawns}/{count}");
         
-        if (spawned < count)
+        if (successfulSpawns < count)
         {
-            Debug.LogWarning($"[SpawnManager] Only spawned {spawned}/{count} enemies. Try reducing minDistanceFromPlayer or enemy count.");
+            Debug.LogWarning($"[SpawnManager] Only spawned {successfulSpawns}/{count} enemies.");
+            Debug.LogWarning($"Try: reducing minDistanceFromPlayer ({minDistanceFromPlayer}f) or enemyCount");
         }
     }
     
     /// <summary>
-    /// Check if a position is too close to any already spawned object
+    /// Check apakah posisi terlalu dekat dengan spawned objects
     /// </summary>
     bool IsTooCloseToOtherSpawns(Vector3 position, float minDistance)
     {
         foreach (Vector3 spawnedPos in spawnedPositions)
         {
-            if (Vector3.Distance(position, spawnedPos) < minDistance)
+            float distance = Vector3.Distance(position, spawnedPos);
+            if (distance < minDistance)
+            {
                 return true;
+            }
         }
         return false;
     }
     
     /// <summary>
-    /// Get a safe respawn position for player (e.g., after death)
-    /// Returns a new random valid tile far from enemies
+    /// Get respawn position untuk player (after death)
     /// </summary>
     public Vector3 GetPlayerRespawnPosition()
     {
@@ -348,8 +383,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         
         if (respawnPos == Vector3.zero)
         {
-            // Fallback: use original spawn position
-            Debug.LogWarning("[SpawnManager] Could not find respawn position, using original spawn point");
+            Debug.LogWarning("[SpawnManager] Using original spawn point for respawn");
             return playerSpawnPosition;
         }
         
@@ -357,7 +391,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Spawn a single item near a specified position (for dynamic spawning)
+    /// Spawn single item (dynamic spawning)
     /// </summary>
     public GameObject SpawnSingleItem(Vector3 nearPosition)
     {
@@ -365,19 +399,20 @@ public class LabyrinthSpawnManager : MonoBehaviour
         
         if (spawnPos == Vector3.zero)
         {
-            Debug.LogWarning("[SpawnManager] Could not spawn single item - no valid position");
+            Debug.LogWarning("[SpawnManager] Could not spawn single item");
             return null;
         }
         
         GameObject item = Instantiate(itemPrefab, spawnPos, Quaternion.identity);
         spawnedPositions.Add(spawnPos);
+        spawnedItems.Add(item);
         
         LogDebug($"Dynamically spawned item at {spawnPos}");
         return item;
     }
     
     /// <summary>
-    /// Spawn a single enemy near a specified position (for dynamic spawning)
+    /// Spawn single enemy (dynamic spawning)
     /// </summary>
     public GameObject SpawnSingleEnemy(Vector3 nearPosition)
     {
@@ -385,30 +420,34 @@ public class LabyrinthSpawnManager : MonoBehaviour
         
         if (spawnPos == Vector3.zero)
         {
-            Debug.LogWarning("[SpawnManager] Could not spawn single enemy - no valid position");
+            Debug.LogWarning("[SpawnManager] Could not spawn single enemy");
             return null;
         }
         
         GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
         enemy.tag = "Ghost";
         spawnedPositions.Add(spawnPos);
+        spawnedEnemies.Add(enemy);
         
         LogDebug($"Dynamically spawned enemy at {spawnPos}");
         return enemy;
     }
     
     /// <summary>
-    /// Clear tracked spawn positions (call before respawning all objects)
+    /// Clear all spawn data - gunakan sebelum respawn all
     /// </summary>
     public void ClearSpawnedPositions()
     {
         spawnedPositions.Clear();
+        spawnedItems.Clear();
+        spawnedEnemies.Clear();
+        spawnedPlayer = null;
         playerSpawnPosition = Vector3.zero;
+        isSpawned = false;
     }
     
     /// <summary>
-    /// Re-cache walkable tiles (call if maze is regenerated)
-    /// Now delegates to GridBuilder to refresh its raycast-based grid
+    /// Refresh grid - panggil jika maze di-regenerate
     /// </summary>
     public void RefreshWalkableTiles()
     {
@@ -419,22 +458,32 @@ public class LabyrinthSpawnManager : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// Get spawn statistics - untuk debugging
+    /// </summary>
+    public void PrintSpawnStats()
+    {
+        Debug.Log("=== SPAWN STATISTICS ===");
+        Debug.Log($"Player: {(spawnedPlayer != null ? "1" : "0")}");
+        Debug.Log($"Items: {spawnedItems.Count} (requested: {itemCount})");
+        Debug.Log($"Enemies: {spawnedEnemies.Count} (requested: {enemyCount})");
+        Debug.Log($"Total spawned positions: {spawnedPositions.Count}");
+        Debug.Log($"Valid cells available: {(gridBuilder != null ? gridBuilder.validCells.Count : 0)}");
+    }
+    
     void LogDebug(string message)
     {
         if (showDebugLogs)
             Debug.Log($"[SpawnManager] {message}");
     }
     
-    // ==================== GIZMOS FOR VISUALIZATION ====================
+    // ==================== GIZMOS ====================
     
     void OnDrawGizmos()
     {
         if (!showGizmos) return;
         
-        // Note: Walkable tiles visualization is now handled by GridBuilder
-        // No need to duplicate - GridBuilder shows all walkable floor cells
-        
-        // Draw spawned object positions (cyan spheres)
+        // Draw spawned positions
         if (Application.isPlaying && spawnedPositions.Count > 0)
         {
             Gizmos.color = spawnedPositionsColor;
@@ -444,12 +493,25 @@ public class LabyrinthSpawnManager : MonoBehaviour
             }
         }
         
-        // Draw player spawn position (blue sphere with radius indicator)
+        // Draw player spawn dengan radius
         if (Application.isPlaying && playerSpawnPosition != Vector3.zero)
         {
             Gizmos.color = Color.blue;
             Gizmos.DrawSphere(playerSpawnPosition, 0.6f);
+            
+            // Draw min distance dari player (untuk enemy)
+            Gizmos.color = new Color(1, 0, 0, 0.2f);
             Gizmos.DrawWireSphere(playerSpawnPosition, minDistanceFromPlayer);
+        }
+        
+        // Draw min distance antar spawns
+        if (Application.isPlaying && spawnedPositions.Count > 0)
+        {
+            Gizmos.color = new Color(0, 1, 0, 0.1f);
+            foreach (Vector3 pos in spawnedPositions)
+            {
+                Gizmos.DrawWireSphere(pos, minDistanceBetweenSpawns);
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ public class GroundCheck : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         Debug.Log("Grounded");
-        logicmovement.groundedchanger();
+        logicmovement.SetGrounded(true);
     }
     
     void Start()
