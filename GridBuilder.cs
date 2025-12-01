@@ -309,7 +309,7 @@ public class GridBuilder : MonoBehaviour
                 if (z - 1 >= 0 && grid[x, z - 1] != null)
                     neighborsList.Add(grid[x, z - 1]);
                 
-                grid[x, z].neighbors = neighborsList.ToArray();
+                grid[x, z].neighbors = neighborsList;
             }
         }
     }
