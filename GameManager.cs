@@ -24,9 +24,10 @@ public class GameManager : MonoBehaviour
     public GameObject ghostPrefab; // Assign Ghost prefab di Inspector
     private HealthIndicator healthIndicator; // Auto-assigned health indicator
 
-    private bool isPaused = false;
-    private bool isPauseSceneLoaded = false;
-    private const string PauseScene = "Pause";
+    // State Management
+    public bool IsPaused { get; private set; } = false;
+    private const string PauseSceneName = "Pause";
+    private const string MainMenuSceneName = "Main-menu";
 
     private void Awake()
     {
@@ -249,42 +250,65 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
+        // Handle Pause Input Global di sini
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (isPaused)
-            {
-                ResumeGame();
-            }
-            else
-            {
-                PauseGame();
-            }
+            TogglePause();
         }
+    }
+
+    public void TogglePause()
+    {
+        if (IsPaused)
+            ResumeGame();
+        else
+            PauseGame();
+    }
+
+    public void PauseGame()
+    {
+        if (IsPaused) return;
+
+        // Load scene additive
+        SceneManager.LoadScene(PauseSceneName, LoadSceneMode.Additive);
+        
+        Time.timeScale = 0f;
+        IsPaused = true;
+
+        // Unlock cursor agar bisa klik tombol
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        // Pause background music while paused
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PauseMusic();
     }
 
     public void ResumeGame()
     {
-        if (!isPauseSceneLoaded) return;
-        SceneManager.UnloadSceneAsync(PauseScene);
+        if (!IsPaused) return;
+
+        // Unload scene pause jika ada
+        // Cek apakah scene pause benar-benar loaded sebelum unload untuk menghindari error
+        SceneManager.UnloadSceneAsync(PauseSceneName);
+        
         Time.timeScale = 1f;
-        isPaused = false;
-        isPauseSceneLoaded = false;
+        IsPaused = false;
+
+        // Kembalikan cursor ke state semula (misal terkunci untuk FPS/TPS)
+        // Sesuaikan dengan kebutuhan game Anda, biasanya locked saat gameplay
+        Cursor.lockState = CursorLockMode.Locked; 
+        Cursor.visible = false;
 
         // Resume background music when game resumes
         if (AudioManager.Instance != null)
             AudioManager.Instance.ResumeMusic();
     }
 
-    public void PauseGame()
+    public void GoToMainMenu()
     {
-        if (isPauseSceneLoaded) return;
-        SceneManager.LoadScene(PauseScene, LoadSceneMode.Additive);
-        Time.timeScale = 0f;
-        isPaused = true;
-        isPauseSceneLoaded = true;
-
-        // Pause background music while paused
-        if (AudioManager.Instance != null)
-            AudioManager.Instance.PauseMusic();
+        Time.timeScale = 1f;
+        IsPaused = false;
+        SceneManager.LoadScene(MainMenuSceneName);
     }
 }
