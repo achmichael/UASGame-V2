@@ -48,18 +48,12 @@ public class GameManager : MonoBehaviour
         {
             case 0: // Easy
                 playerLives = 5;
-                // Activate 1 ghosts only
-                ActivateGhosts(1);
                 break;
             case 1: // Normal
                 playerLives = 4;
-                // Activate 2 ghosts
-                ActivateGhosts(2);
                 break;
             case 2: // Hard
                 playerLives = 3;
-                // Activate 3 ghosts
-                ActivateGhosts(3);
                 break;
         }
 
