@@ -7,7 +7,7 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
-    public float mouseSensitivity = 100f;
+    public float mouseSensitivity = 150f;
     public Transform playerBody; // assign player root transform (not camera)
     public bool lockCursorOnStart = true;
 

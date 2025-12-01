@@ -22,6 +22,7 @@ public class GameManager : MonoBehaviour
     [Header("References")]
     public HUDController hudController;
     public GameObject ghostPrefab; // Assign Ghost prefab di Inspector
+    private HealthIndicator healthIndicator; // Auto-assigned health indicator
 
     private bool isPaused = false;
     private bool isPauseSceneLoaded = false;
@@ -65,6 +66,16 @@ public class GameManager : MonoBehaviour
         // Try find HUD in scene if not manually assigned
         if (hudController == null)
             hudController = FindObjectOfType<HUDController>();
+        
+        // Auto-assign HealthIndicator
+        if (healthIndicator == null)
+        {
+            healthIndicator = FindObjectOfType<HealthIndicator>();
+            if (healthIndicator != null)
+            {
+                Debug.Log("[GameManager] HealthIndicator auto-assigned successfully!");
+            }
+        }
 
         // load last checkpoint if present
         if (PlayerPrefs.HasKey("CheckpointX"))
@@ -89,6 +100,9 @@ public class GameManager : MonoBehaviour
         {
             AudioManager.Instance.PlayMusic();
         }
+        
+        // Update health indicator dengan playerLives awal
+        UpdateHealthIndicator();
     }
 
     void ActivateGhosts(int count)
@@ -181,6 +195,9 @@ public class GameManager : MonoBehaviour
         }
 
         playerLives--;
+        
+        // Update health indicator setelah kehilangan life
+        UpdateHealthIndicator();
 
         if (playerLives <= 0)
         {
@@ -215,6 +232,18 @@ public class GameManager : MonoBehaviour
     {
         if (hudController != null)
             hudController.UpdateHUD(collectedCount, playerLives, totalCollectibles);
+    }
+    
+    /// <summary>
+    /// Update health indicator dengan playerLives
+    /// </summary>
+    void UpdateHealthIndicator()
+    {
+        if (healthIndicator != null)
+        {
+            healthIndicator.UpdateHealth(playerLives);
+            Debug.Log($"[GameManager] Health indicator updated: {playerLives} lives");
+        }
     }
 
     void Update()

@@ -15,10 +15,31 @@ public class PlayerHealth : MonoBehaviour
     public FadeTransition fadeTransition; // optional for dramatic death
     public AudioClip hurtSound;
     public AudioClip deathSound;
+    
+    [Header("UI")]
+    public HealthIndicator healthIndicator; // Referensi ke health indicator UI (auto-assigned)
 
     private void Start()
     {
         currentHealth = maxHealth;
+        
+        // Auto-assign HealthIndicator jika belum di-set
+        if (healthIndicator == null)
+        {
+            healthIndicator = FindObjectOfType<HealthIndicator>();
+            
+            if (healthIndicator != null)
+            {
+                Debug.Log("[PlayerHealth] HealthIndicator auto-assigned successfully!");
+            }
+            else
+            {
+                Debug.LogWarning("[PlayerHealth] HealthIndicator tidak ditemukan di scene. Pastikan ada GameObject dengan HealthIndicator script.");
+            }
+        }
+        
+        // Update health indicator di awal game
+        UpdateHealthUI();
     }
 
     public void TakeDamage(int amount)
@@ -28,6 +49,9 @@ public class PlayerHealth : MonoBehaviour
 
         currentHealth -= amount;
         Debug.Log($"Player terkena serangan! Sisa HP: {currentHealth}");
+
+        // Update health UI setelah damage
+        UpdateHealthUI();
 
         if (damageEffect != null)
             damageEffect.ShowDamageEffect();
@@ -71,7 +95,22 @@ public class PlayerHealth : MonoBehaviour
     public void RestoreFullHealth()
     {
         currentHealth = maxHealth;
+        
+        // Update health UI setelah restore
+        UpdateHealthUI();
     }
 
     public int GetCurrentHealth() => currentHealth;
+    
+    /// <summary>
+    /// Update health indicator UI berdasarkan playerLives dari GameManager
+    /// </summary>
+    private void UpdateHealthUI()
+    {
+        if (healthIndicator != null && GameManager.Instance != null)
+        {
+            // Update health icon berdasarkan playerLives dari GameManager
+            healthIndicator.UpdateHealth(GameManager.Instance.playerLives);
+        }
+    }
 }
