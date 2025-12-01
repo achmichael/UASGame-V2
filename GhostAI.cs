@@ -18,6 +18,7 @@ public class GhostAI : MonoBehaviour
     public float pathUpdateInterval = 0.5f;
     public float attackCooldown = 1f; // Cooldown antara serangan
     public int attackDamage = 10; // Damage per serangan
+    public float attackMoveSpeed = 2f; // Kecepatan gerak saat attack untuk menjaga jarak
 
     [Header("States")]
     public bool isChasing = false;
@@ -74,8 +75,19 @@ public class GhostAI : MonoBehaviour
             isAttacking = true;
             isChasing = false;
             
-            // Stop pergerakan saat menyerang
-            currentPath = null; 
+            // Jaga jarak attackRange dari player
+            Vector3 directionToPlayer = (player.position - transform.position).normalized;
+            Vector3 targetPosition = player.position - directionToPlayer * attackRange;
+            targetPosition.y = transform.position.y; // Jaga tinggi tetap
+            
+            transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
+            
+            // Rotasi menghadap player
+            if (directionToPlayer != Vector3.zero)
+            {
+                Quaternion lookRotation = Quaternion.LookRotation(directionToPlayer);
+                transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
+            }
             
             // Serang player jika cooldown habis
             if (Time.time - lastAttackTime > attackCooldown)

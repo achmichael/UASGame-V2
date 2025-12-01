@@ -19,6 +19,8 @@ public class MovementLogic : MonoBehaviour
     public float jumpPower = 10f;
     public float fallSpeed = 2f;
     public float airMultiplier = 0.3f;
+    public float jumpForwardMultiplier = 0.5f; // Multiplier untuk arah lompatan
+    private Vector3 jumpDirection; // Arah saat melompat
     
     [Header("Ground Detection")]
     public bool useRaycastGroundCheck = false; // Default FALSE untuk compatibility
@@ -175,8 +177,25 @@ public class MovementLogic : MonoBehaviour
         }
         else
         {
-            // Air movement (reduced control)
-            rb.AddForce(moveDirection * currentSpeed * moveForce * airMultiplier, ForceMode.Force);
+            // Air movement - sangat terbatas untuk mencegah perubahan arah tiba-tiba
+            // Hanya izinkan sedikit penyesuaian arah, bukan perubahan total
+            Vector3 currentHorizontalVelocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+            Vector3 desiredAirControl = moveDirection * currentSpeed * moveForce * airMultiplier;
+            
+            // Batasi air control agar tidak berlawanan dengan momentum saat jump
+            if (currentHorizontalVelocity.magnitude > 0.5f)
+            {
+                Vector3 velocityDirection = currentHorizontalVelocity.normalized;
+                float alignment = Vector3.Dot(moveDirection.normalized, velocityDirection);
+                
+                // Jika input berlawanan dengan momentum (alignment negatif), kurangi kontrolnya
+                if (alignment < 0f)
+                {
+                    desiredAirControl *= 0.2f; // Sangat kurangi kontrol saat mencoba berbalik arah
+                }
+            }
+            
+            rb.AddForce(desiredAirControl, ForceMode.Force);
             
             // Apply gravity
             rb.AddForce(Vector3.down * fallSpeed, ForceMode.Force);
@@ -246,11 +265,35 @@ public class MovementLogic : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Space) && grounded)
         {
+            // Simpan arah movement saat melompat
+            Vector3 forward = cameraTransform.forward;
+            Vector3 right = cameraTransform.right;
+            forward.y = 0f;
+            right.y = 0f;
+            forward.Normalize();
+            right.Normalize();
+            
+            jumpDirection = forward * verticalInput + right * horizontalInput;
+            
+            // Normalize jika ada input
+            if (jumpDirection.magnitude > 0.1f)
+            {
+                jumpDirection.Normalize();
+            }
+            
             // Reset Y velocity
             rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
             
-            // Jump
-            rb.AddForce(Vector3.up * jumpPower, ForceMode.Impulse);
+            // Jump dengan arah
+            Vector3 jumpForce = Vector3.up * jumpPower;
+            
+            // Tambahkan directional force
+            if (jumpDirection.magnitude > 0.1f)
+            {
+                jumpForce += jumpDirection * jumpPower * jumpForwardMultiplier;
+            }
+            
+            rb.AddForce(jumpForce, ForceMode.Impulse);
             
             grounded = false;
             aerialBoost = true;
@@ -258,7 +301,7 @@ public class MovementLogic : MonoBehaviour
             if (anim != null)
                 anim.SetBool("Jump", true);
                 
-            Debug.Log("[MovementLogic] Jump!");
+            Debug.Log("[MovementLogic] Jump with direction: " + jumpDirection);
         }
     }
     
