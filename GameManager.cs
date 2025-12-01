@@ -41,7 +41,6 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-
         int difficulty = PlayerPrefs.GetInt("Difficulty", 0); // default Easy
         Debug.Log("Game Difficulty Level: " + difficulty);
         switch (difficulty)
