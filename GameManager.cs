@@ -173,6 +173,19 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Kurangi nyawa HANYA SEKALI di sini
+        playerLives--;
+        Debug.Log($"Player Respawning... Lives remaining: {playerLives}");
+        
+        // Update health indicator setelah kehilangan life
+        UpdateHealthIndicator();
+
+        if (playerLives <= 0)
+        {
+            SceneManager.LoadScene("GameOverScene");
+            return;
+        }
+
         // Teleport player ke last checkpoint
         CharacterController cc = player.GetComponent<CharacterController>();
         if (cc != null)
@@ -187,18 +200,13 @@ public class GameManager : MonoBehaviour
             player.transform.position = lastCheckpointPos;
         }
 
-        playerLives--;
-        
-        // Update health indicator setelah kehilangan life
-        UpdateHealthIndicator();
+        UpdateHUD();
 
-        if (playerLives <= 0)
+        // Reset status player (Health, Invulnerability, IsDead flag)
+        PlayerHealth ph = player.GetComponent<PlayerHealth>();
+        if (ph != null)
         {
-            SceneManager.LoadScene("GameOverScene");
-        }
-        else
-        {
-            UpdateHUD();
+            ph.OnRespawn();
         }
     }
 

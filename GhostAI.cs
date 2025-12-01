@@ -65,6 +65,13 @@ public class GhostAI : MonoBehaviour
     {
         if (player == null || gridBuilder == null || gridBuilder.grid == null) return;
 
+        // Cek jika player sudah mati, hentikan AI
+        if (playerHealth != null && playerHealth.IsDead)
+        {
+            SetAnimationState(true, false, false, false); // Set Idle
+            return;
+        }
+
         // Gunakan jarak horizontal agar tidak terpengaruh perbedaan ketinggian (Y-axis)
         Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
         Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);

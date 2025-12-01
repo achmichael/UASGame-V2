@@ -11,6 +11,11 @@ public class PlayerHealth : MonoBehaviour
     public float damageCooldown = 1.5f;
     private bool isDamaged = false;
 
+    // State flags
+    public bool IsDead { get; private set; }
+    public bool IsInvulnerable { get; private set; }
+    public float respawnInvulnerabilityTime = 3f; // Durasi kebal setelah respawn
+
     public DamageEffect damageEffect; // Referensi ke skrip efek layar
     public FadeTransition fadeTransition; // optional for dramatic death
     public AudioClip hurtSound;
@@ -22,6 +27,8 @@ public class PlayerHealth : MonoBehaviour
     private void Start()
     {
         currentHealth = maxHealth;
+        IsDead = false;
+        IsInvulnerable = false;
         
         // Auto-assign HealthIndicator jika belum di-set
         if (healthIndicator == null)
@@ -44,9 +51,10 @@ public class PlayerHealth : MonoBehaviour
 
     public void TakeDamage(int amount)
     {
-        if (isDamaged) return; // mencegah spam damage
+        // Cek kondisi yang mencegah damage: Mati, Kebal, atau sedang Cooldown
+        if (IsDead || IsInvulnerable || isDamaged) return; 
+        
         isDamaged = true;
-
         currentHealth -= amount;
         Debug.Log($"Player terkena serangan! Sisa HP: {currentHealth}");
 
@@ -71,6 +79,9 @@ public class PlayerHealth : MonoBehaviour
 
     void Die()
     {
+        if (IsDead) return; // Mencegah double death trigger
+        IsDead = true;
+
         if (deathSound != null)
             AudioSource.PlayClipAtPoint(deathSound, transform.position);
 
@@ -78,18 +89,41 @@ public class PlayerHealth : MonoBehaviour
         if (fadeTransition != null)
             fadeTransition.FadeOutAndIn();
 
+        Debug.Log("Player Mati. Meminta Respawn ke GameManager.");
+        
         // Panggil respawn melalui GameManager
         GameManager.Instance?.RespawnPlayer(gameObject);
-
-        // Reset HP
-        currentHealth = maxHealth;
-        isDamaged = false;
-        Debug.Log("Player respawn di checkpoint terakhir");
     }
 
     void ResetDamageState()
     {
         isDamaged = false;
+    }
+
+    /// <summary>
+    /// Dipanggil oleh GameManager setelah posisi player di-reset
+    /// </summary>
+    public void OnRespawn()
+    {
+        IsDead = false;
+        currentHealth = maxHealth;
+        isDamaged = false;
+        
+        // Mulai invulnerability
+        StartCoroutine(InvulnerabilityRoutine());
+        
+        // Update health UI setelah restore
+        UpdateHealthUI();
+        Debug.Log("Player Health Reset & Invulnerable started.");
+    }
+
+    private System.Collections.IEnumerator InvulnerabilityRoutine()
+    {
+        IsInvulnerable = true;
+        Debug.Log("Player Invulnerable...");
+        yield return new WaitForSeconds(respawnInvulnerabilityTime);
+        IsInvulnerable = false;
+        Debug.Log("Player Vulnerable again.");
     }
 
     public void RestoreFullHealth()
