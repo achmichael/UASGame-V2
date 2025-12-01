@@ -47,7 +47,6 @@ public class GameManager : MonoBehaviour
         {
             case 0: // Easy
                 playerLives = 5;
-                // totalCollectibles = 30;
                 // Activate 1 ghosts only
                 ActivateGhosts(1);
                 break;
@@ -215,7 +214,7 @@ public class GameManager : MonoBehaviour
     void UpdateHUD()
     {
         if (hudController != null)
-            hudController.UpdateHUD(collectedCount, playerLives);
+            hudController.UpdateHUD(collectedCount, playerLives, totalCollectibles);
     }
 
     void Update()

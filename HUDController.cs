@@ -12,10 +12,10 @@ public class HUDController : MonoBehaviour
 
 
 
-    public void UpdateHUD(int collected, int lives)
+    public void UpdateHUD(int collected, int lives, int total)
     {
         if (collectibleText != null)
-            collectibleText.text = $"{collected} / 5";
+            collectibleText.text = $"{collected} / {total}";
 
         if (livesText != null)
             livesText.text = $"Health: {lives}";

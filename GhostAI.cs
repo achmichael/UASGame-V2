@@ -77,7 +77,7 @@ public class GhostAI : MonoBehaviour
             
             // Jaga jarak attackRange dari player
             Vector3 directionToPlayer = (player.position - transform.position).normalized;
-            Vector3 targetPosition = player.position - directionToPlayer * attackRange;
+            Vector3 targetPosition = player.position - directionToPlayer;
             targetPosition.y = transform.position.y; // Jaga tinggi tetap
             
             transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
