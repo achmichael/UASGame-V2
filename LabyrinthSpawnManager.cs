@@ -29,8 +29,14 @@ public class LabyrinthSpawnManager : MonoBehaviour
     
     [Header("Enemy Spawn")]
     public GameObject enemyPrefab;
+    [Tooltip("Jumlah enemy (akan di-override berdasarkan difficulty)")]
     public int enemyCount = 3;
     public float enemySpawnHeight = 1.0f;
+    
+    [Header("Difficulty Settings")]
+    [Tooltip("Enemy count per difficulty: Easy=2, Normal=3, Hard=4")]
+    private int currentDifficulty = 1; // 0=Easy, 1=Normal, 2=Hard
+    private float enemySpeedMultiplier = 1.0f;
     
     [Header("Advanced Settings")]
     [Tooltip("Maximum attempts to find position meeting distance requirements")]
@@ -62,6 +68,9 @@ public class LabyrinthSpawnManager : MonoBehaviour
     
     void Start()
     {
+        // Load difficulty dari PlayerPrefs
+        LoadDifficultySettings();
+        
         ValidateSetup();
         
         if (gridBuilder == null)
@@ -82,6 +91,38 @@ public class LabyrinthSpawnManager : MonoBehaviour
         {
             Debug.Log("[SpawnManager] Auto-spawning all objects...");
             SpawnAllObjects();
+        }
+    }
+    
+    /// <summary>
+    /// Load difficulty settings dari PlayerPrefs dan adjust enemy count & speed
+    /// </summary>
+    void LoadDifficultySettings()
+    {
+        currentDifficulty = PlayerPrefs.GetInt("Difficulty", 1); // Default: Normal
+        
+        switch (currentDifficulty)
+        {
+            case 0: // Easy
+                enemyCount = 2;
+                enemySpeedMultiplier = 1.0f;
+                Debug.Log("[SpawnManager] Difficulty: EASY - 2 enemies, normal speed");
+                break;
+            case 1: // Normal
+                enemyCount = 3;
+                enemySpeedMultiplier = 1.2f;
+                Debug.Log("[SpawnManager] Difficulty: NORMAL - 3 enemies, 20% faster");
+                break;
+            case 2: // Hard
+                enemyCount = 4;
+                enemySpeedMultiplier = 1.5f;
+                Debug.Log("[SpawnManager] Difficulty: HARD - 4 enemies, 50% faster");
+                break;
+            default:
+                enemyCount = 3;
+                enemySpeedMultiplier = 1.0f;
+                Debug.LogWarning("[SpawnManager] Unknown difficulty, using Normal settings");
+                break;
         }
     }
     
@@ -305,11 +346,11 @@ public class LabyrinthSpawnManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Spawn enemies dengan jumlah yang exact
+    /// Spawn enemies dengan jumlah yang exact dan adjust speed berdasarkan difficulty
     /// </summary>
     public void SpawnEnemies(int count)
     {
-        Debug.Log($"[SpawnManager] Spawning {count} enemies...");
+        Debug.Log($"[SpawnManager] Spawning {count} enemies (Difficulty: {GetDifficultyName()})...");
         
         int successfulSpawns = 0;
         int failedAttempts = 0;
@@ -342,19 +383,70 @@ public class LabyrinthSpawnManager : MonoBehaviour
             enemy.tag = "Ghost";
             enemy.name = $"Ghost_{successfulSpawns + 1}";
             
+            // BARU: Adjust speed berdasarkan difficulty
+            ApplyDifficultyToEnemy(enemy);
+            
             spawnedPositions.Add(spawnPos);
             spawnedEnemies.Add(enemy);
             successfulSpawns++;
             
-            LogDebug($"Enemy {successfulSpawns}/{count} spawned at {spawnPos}");
+            LogDebug($"Enemy {successfulSpawns}/{count} spawned at {spawnPos} with speed multiplier {enemySpeedMultiplier}x");
         }
         
-        Debug.Log($"[SpawnManager] ✓ Enemies spawned: {successfulSpawns}/{count}");
+        Debug.Log($"[SpawnManager] ✓ Enemies spawned: {successfulSpawns}/{count} with {enemySpeedMultiplier}x speed");
         
         if (successfulSpawns < count)
         {
             Debug.LogWarning($"[SpawnManager] Only spawned {successfulSpawns}/{count} enemies.");
             Debug.LogWarning($"Try: reducing minDistanceFromPlayer ({minDistanceFromPlayer}f) or enemyCount");
+        }
+    }
+    
+    /// <summary>
+    /// Apply difficulty settings to enemy (adjust speed based on difficulty)
+    /// </summary>
+    void ApplyDifficultyToEnemy(GameObject enemy)
+    {
+        GhostAI ghostAI = enemy.GetComponent<GhostAI>();
+        
+        if (ghostAI != null)
+        {
+            // Set base speeds berdasarkan difficulty
+            switch (currentDifficulty)
+            {
+                case 0: // Easy
+                    ghostAI.moveSpeed = 3f;
+                    ghostAI.chaseRange = 8f;
+                    break;
+                case 1: // Normal
+                    ghostAI.moveSpeed = 4.5f; // Lebih cepat dari Easy
+                    ghostAI.chaseRange = 12f;
+                    break;
+                case 2: // Hard
+                    ghostAI.moveSpeed = 6f; // Lebih cepat dari Normal
+                    ghostAI.chaseRange = 15f;
+                    break;
+            }
+            
+            LogDebug($"Enemy configured: Speed={ghostAI.moveSpeed}, ChaseRange={ghostAI.chaseRange}");
+        }
+        else
+        {
+            Debug.LogWarning($"[SpawnManager] Enemy {enemy.name} doesn't have GhostAI component!");
+        }
+    }
+    
+    /// <summary>
+    /// Get difficulty name untuk logging
+    /// </summary>
+    string GetDifficultyName()
+    {
+        switch (currentDifficulty)
+        {
+            case 0: return "Easy";
+            case 1: return "Normal";
+            case 2: return "Hard";
+            default: return "Unknown";
         }
     }
     
@@ -412,7 +504,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Spawn single enemy (dynamic spawning)
+    /// Spawn single enemy (dynamic spawning) - dengan difficulty settings
     /// </summary>
     public GameObject SpawnSingleEnemy(Vector3 nearPosition)
     {
@@ -426,10 +518,14 @@ public class LabyrinthSpawnManager : MonoBehaviour
         
         GameObject enemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
         enemy.tag = "Ghost";
+        
+        // Apply difficulty settings
+        ApplyDifficultyToEnemy(enemy);
+        
         spawnedPositions.Add(spawnPos);
         spawnedEnemies.Add(enemy);
         
-        LogDebug($"Dynamically spawned enemy at {spawnPos}");
+        LogDebug($"Dynamically spawned enemy at {spawnPos} with difficulty settings");
         return enemy;
     }
     
@@ -464,6 +560,8 @@ public class LabyrinthSpawnManager : MonoBehaviour
     public void PrintSpawnStats()
     {
         Debug.Log("=== SPAWN STATISTICS ===");
+        Debug.Log($"Difficulty: {GetDifficultyName()} (Level {currentDifficulty})");
+        Debug.Log($"Enemy Speed Multiplier: {enemySpeedMultiplier}x");
         Debug.Log($"Player: {(spawnedPlayer != null ? "1" : "0")}");
         Debug.Log($"Items: {spawnedItems.Count} (requested: {itemCount})");
         Debug.Log($"Enemies: {spawnedEnemies.Count} (requested: {enemyCount})");

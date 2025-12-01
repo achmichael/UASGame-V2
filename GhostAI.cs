@@ -65,7 +65,10 @@ public class GhostAI : MonoBehaviour
     {
         if (player == null || gridBuilder == null || gridBuilder.grid == null) return;
 
-        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+        // Gunakan jarak horizontal agar tidak terpengaruh perbedaan ketinggian (Y-axis)
+        Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
+        Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);
+        float distanceToPlayer = Vector3.Distance(enemyPosFlat, playerPosFlat);
 
         // --- LOGIKA STATE ANIMASI & AI ---
 
@@ -76,9 +79,9 @@ public class GhostAI : MonoBehaviour
             isChasing = false;
             
             // Jaga jarak attackRange dari player
-            Vector3 directionToPlayer = (player.position - transform.position).normalized;
-            Vector3 targetPosition = player.position - directionToPlayer;
-            targetPosition.y = transform.position.y; // Jaga tinggi tetap
+            Vector3 directionToPlayer = (playerPosFlat - enemyPosFlat).normalized;
+            Vector3 targetPosition = player.position - directionToPlayer; // Target 1 unit dari player
+            targetPosition.y = transform.position.y; // Jaga tinggi tetap sesuai enemy
             
             transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
             
