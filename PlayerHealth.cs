@@ -65,7 +65,12 @@ public class PlayerHealth : MonoBehaviour
             damageEffect.ShowDamageEffect();
 
         if (hurtSound != null)
-            AudioSource.PlayClipAtPoint(hurtSound, transform.position);
+        {
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlaySFX(hurtSound, transform.position);
+            else
+                AudioSource.PlayClipAtPoint(hurtSound, transform.position);
+        }
 
         if (currentHealth <= 0)
         {
@@ -83,7 +88,12 @@ public class PlayerHealth : MonoBehaviour
         IsDead = true;
 
         if (deathSound != null)
-            AudioSource.PlayClipAtPoint(deathSound, transform.position);
+        {
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlaySFX(deathSound, transform.position);
+            else
+                AudioSource.PlayClipAtPoint(deathSound, transform.position);
+        }
 
         // Opsional: bermain fade out sebelum respawn
         if (fadeTransition != null)

@@ -11,6 +11,10 @@ public class AudioManager : MonoBehaviour
     public bool playOnStart = true;
     [Range(0f,1f)] public float musicVolume = 0.6f;
 
+    [Header("SFX Settings")]
+    [Range(0f, 1f)] public float sfxVolume = 1.0f;
+    public bool sfxMuted = false;
+
     AudioSource audioSource;
 
     void Awake()
@@ -72,5 +76,31 @@ public class AudioManager : MonoBehaviour
     {
         musicVolume = Mathf.Clamp01(vol);
         if (audioSource != null) audioSource.volume = musicVolume;
+    }
+
+    public void SetSFXVolume(float vol)
+    {
+        sfxVolume = Mathf.Clamp01(vol);
+    }
+
+    public void SetSFXMuted(bool muted)
+    {
+        sfxMuted = muted;
+    }
+
+    /// <summary>
+    /// Play SFX at position with current global SFX volume
+    /// </summary>
+    public void PlaySFX(AudioClip clip, Vector3 position)
+    {
+        if (clip == null) return;
+
+        float finalVolume = sfxMuted ? 0f : sfxVolume;
+        
+        // Don't spawn AudioSource if volume is 0
+        if (finalVolume > 0.01f)
+        {
+            AudioSource.PlayClipAtPoint(clip, position, finalVolume);
+        }
     }
 }

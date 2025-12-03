@@ -45,7 +45,12 @@ public class CollectibleItem : MonoBehaviour
 
             // Mainkan efek suara jika ada
             if (collectSound != null)
-                AudioSource.PlayClipAtPoint(collectSound, transform.position);
+            {
+                if (AudioManager.Instance != null)
+                    AudioManager.Instance.PlaySFX(collectSound, transform.position);
+                else
+                    AudioSource.PlayClipAtPoint(collectSound, transform.position);
+            }
 
             // Hancurkan objek setelah dikumpulkan
             Destroy(gameObject);

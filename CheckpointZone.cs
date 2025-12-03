@@ -40,7 +40,12 @@ public class CheckpointZone : MonoBehaviour
 
             // Suara aktivasi
             if (activateSound != null)
-                AudioSource.PlayClipAtPoint(activateSound, transform.position);
+            {
+                if (AudioManager.Instance != null)
+                    AudioManager.Instance.PlaySFX(activateSound, transform.position);
+                else
+                    AudioSource.PlayClipAtPoint(activateSound, transform.position);
+            }
 
             Debug.Log($"Checkpoint {checkpointID} diaktifkan!");
         }
