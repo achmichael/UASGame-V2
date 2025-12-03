@@ -32,7 +32,23 @@ public class AudioManager : MonoBehaviour
         audioSource = GetComponent<AudioSource>();
         audioSource.loop = true;
         audioSource.playOnAwake = false;
-        audioSource.volume = musicVolume;
+        
+        // Load saved settings immediately
+        LoadSettings();
+        
+        // Apply initial volume
+        UpdateMusicVolume();
+    }
+
+    void LoadSettings()
+    {
+        // Load Music Settings
+        musicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.6f);
+        musicMuted = PlayerPrefs.GetInt("MusicMuted", 0) == 1;
+        
+        // Load SFX Settings
+        sfxVolume = PlayerPrefs.GetFloat("SFXVolume", 1f);
+        sfxMuted = PlayerPrefs.GetInt("SFXMuted", 0) == 1;
     }
 
     void Start()
