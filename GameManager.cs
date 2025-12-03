@@ -174,14 +174,32 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Kurangi nyawa HANYA SEKALI di sini
-        playerLives--;
-        Debug.Log($"Player Respawning... Lives remaining: {playerLives}");
+        // Check if player actually died from health depletion
+        PlayerHealth ph = player.GetComponent<PlayerHealth>();
+        bool shouldLoseLife = true;
         
-        // Update health indicator setelah kehilangan life
-        UpdateHealthIndicator();
+        if (ph != null)
+        {
+            // Only lose life if health is depleted (<= 0)
+            // This prevents losing lives on simple respawns/teleports
+            if (ph.GetCurrentHealth() > 0)
+            {
+                shouldLoseLife = false;
+                Debug.Log("Respawn requested but health > 0. Not deducting life.");
+            }
+        }
 
-        if (playerLives <= 0)
+        if (shouldLoseLife)
+        {
+            // Kurangi nyawa HANYA SEKALI di sini
+            playerLives--;
+            Debug.Log($"Player Respawning... Lives remaining: {playerLives}");
+            
+            // Update health indicator setelah kehilangan life
+            UpdateHealthIndicator();
+        }
+
+        if (playerLives <= 0 && shouldLoseLife)
         {
             SceneManager.LoadScene("GameOverScene");
             return;
@@ -204,7 +222,6 @@ public class GameManager : MonoBehaviour
         UpdateHUD();
 
         // Reset status player (Health, Invulnerability, IsDead flag)
-        PlayerHealth ph = player.GetComponent<PlayerHealth>();
         if (ph != null)
         {
             ph.OnRespawn();
