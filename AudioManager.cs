@@ -10,6 +10,7 @@ public class AudioManager : MonoBehaviour
     [Tooltip("Auto play music on Start")]
     public bool playOnStart = true;
     [Range(0f,1f)] public float musicVolume = 0.6f;
+    public bool musicMuted = false;
 
     [Header("SFX Settings")]
     [Range(0f, 1f)] public float sfxVolume = 1.0f;
@@ -75,7 +76,21 @@ public class AudioManager : MonoBehaviour
     public void SetVolume(float vol)
     {
         musicVolume = Mathf.Clamp01(vol);
-        if (audioSource != null) audioSource.volume = musicVolume;
+        UpdateMusicVolume();
+    }
+
+    public void SetMusicMuted(bool muted)
+    {
+        musicMuted = muted;
+        UpdateMusicVolume();
+    }
+
+    private void UpdateMusicVolume()
+    {
+        if (audioSource != null)
+        {
+            audioSource.volume = musicMuted ? 0f : musicVolume;
+        }
     }
 
     public void SetSFXVolume(float vol)
