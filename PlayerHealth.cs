@@ -15,26 +15,31 @@ public class PlayerHealth : MonoBehaviour
     public bool IsDead { get; private set; }
     public bool IsInvulnerable { get; private set; }
     public float respawnInvulnerabilityTime = 3f; // Durasi kebal setelah respawn
-
+    public float deathAnimationDuration = 2f; // Durasi animasi death sebelum respawn
+    
     public DamageEffect damageEffect; // Referensi ke skrip efek layar
     public FadeTransition fadeTransition; // optional for dramatic death
     public AudioClip hurtSound;
     public AudioClip deathSound;
-    
+
     [Header("UI")]
     public HealthIndicator healthIndicator; // Referensi ke health indicator UI (auto-assigned)
+
+    private Animator animator;
 
     private void Start()
     {
         currentHealth = maxHealth;
         IsDead = false;
         IsInvulnerable = false;
-        
+
+        animator = GetComponentInChildren<Animator>();
+        Debug.Log("Value of animator: " + animator);
         // Auto-assign HealthIndicator jika belum di-set
         if (healthIndicator == null)
         {
             healthIndicator = FindObjectOfType<HealthIndicator>();
-            
+
             if (healthIndicator != null)
             {
                 Debug.Log("[PlayerHealth] HealthIndicator auto-assigned successfully!");
@@ -44,7 +49,6 @@ public class PlayerHealth : MonoBehaviour
                 Debug.LogWarning("[PlayerHealth] HealthIndicator tidak ditemukan di scene. Pastikan ada GameObject dengan HealthIndicator script.");
             }
         }
-        
         // Update health indicator di awal game
         UpdateHealthUI();
     }
@@ -52,8 +56,8 @@ public class PlayerHealth : MonoBehaviour
     public void TakeDamage(int amount)
     {
         // Cek kondisi yang mencegah damage: Mati, Kebal, atau sedang Cooldown
-        if (IsDead || IsInvulnerable || isDamaged) return; 
-        
+        if (IsDead || IsInvulnerable || isDamaged) return;
+
         isDamaged = true;
         currentHealth -= amount;
         Debug.Log($"Player terkena serangan! Sisa HP: {currentHealth}");
@@ -87,6 +91,14 @@ public class PlayerHealth : MonoBehaviour
         if (IsDead) return; // Mencegah double death trigger
         IsDead = true;
 
+        if (animator != null)
+        {
+            animator.SetBool("Death", true);
+            Debug.Log($"Animator Death triggered: {animator.GetBool("Death")}");
+        }
+
+        Debug.Log($"Player death state value {IsDead}");
+
         if (deathSound != null)
         {
             if (AudioManager.Instance != null)
@@ -99,9 +111,20 @@ public class PlayerHealth : MonoBehaviour
         if (fadeTransition != null)
             fadeTransition.FadeOutAndIn();
 
-        Debug.Log("Player Mati. Meminta Respawn ke GameManager.");
+        Debug.Log("Player Mati. Menunggu animasi death selesai...");
+
+        // Tunggu animasi death selesai sebelum respawn
+        StartCoroutine(WaitForDeathAnimation());
+    }
+
+    private System.Collections.IEnumerator WaitForDeathAnimation()
+    {
+        // Tunggu durasi animasi death
+        yield return new WaitForSeconds(deathAnimationDuration);
         
-        // Panggil respawn melalui GameManager
+        Debug.Log("Animasi death selesai. Meminta Respawn ke GameManager.");
+        
+        // Panggil respawn melalui GameManager setelah animasi selesai
         GameManager.Instance?.RespawnPlayer(gameObject);
     }
 
@@ -118,10 +141,15 @@ public class PlayerHealth : MonoBehaviour
         IsDead = false;
         currentHealth = maxHealth;
         isDamaged = false;
-        
+
+        if (animator != null)
+        {
+            animator.SetBool("Death", false);
+        }
+
         // Mulai invulnerability
         StartCoroutine(InvulnerabilityRoutine());
-        
+
         // Update health UI setelah restore
         UpdateHealthUI();
         Debug.Log("Player Health Reset & Invulnerable started.");
@@ -139,13 +167,13 @@ public class PlayerHealth : MonoBehaviour
     public void RestoreFullHealth()
     {
         currentHealth = maxHealth;
-        
+
         // Update health UI setelah restore
         UpdateHealthUI();
     }
 
     public int GetCurrentHealth() => currentHealth;
-    
+
     /// <summary>
     /// Update health indicator UI berdasarkan playerLives dari GameManager
     /// </summary>
