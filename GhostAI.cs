@@ -22,6 +22,9 @@ public class GhostAI : MonoBehaviour
     [Tooltip("Jarak di mana enemy akan selalu memutar badan menghadap player.")]
     public float facePlayerDistance = 5.0f;
 
+    [Tooltip("Jarak minimal yang dijaga enemy dari player saat menyerang (agar tidak clipping).")]
+    public float minCombatDistance = 1.0f;
+
     [Header("Advanced Attack Conditions")]
     [Tooltip("Sudut maksimal (0-180) agar enemy dianggap menghadap player.")]
     public float frontAngleThreshold = 60f;
@@ -139,8 +142,9 @@ public class GhostAI : MonoBehaviour
         // Jaga jarak attackRange dari player (sedikit mundur/maju biar pas)
         Vector3 directionToPlayer = (playerPosFlat - enemyPosFlat).normalized;
         
-        // Target posisi sedikit di depan player
-        Vector3 targetPosition = player.position - directionToPlayer * (attackRange * 0.5f); 
+        // Target posisi sedikit di depan player berdasarkan minCombatDistance
+        // Agar enemy tidak menabrak/clipping dengan player
+        Vector3 targetPosition = player.position - directionToPlayer * minCombatDistance; 
         targetPosition.y = transform.position.y; // Jaga tinggi tetap sesuai enemy
         
         // Gerak perlahan saat attack (adjust positioning)
@@ -419,6 +423,9 @@ public class GhostAI : MonoBehaviour
 
         Gizmos.color = Color.magenta;
         Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        Gizmos.color = new Color(1f, 0.5f, 0f); // Orange
+        Gizmos.DrawWireSphere(transform.position, minCombatDistance);
 
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, facePlayerDistance);
