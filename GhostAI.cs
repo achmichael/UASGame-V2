@@ -7,18 +7,34 @@ public class GhostAI : MonoBehaviour
     [Header("References")]
     public Transform player;
     public GridBuilder gridBuilder;
-    public Animator animator; // Referensi ke Animator
-    private PlayerHealth playerHealth; // Referensi ke PlayerHealth untuk serangan
+    public Animator animator; 
+    private PlayerHealth playerHealth; 
 
     [Header("AI Settings")]
     public float chaseRange = 12f;
-    public float attackRange = 1.5f; // Jarak untuk memicu serangan
+    public float attackRange = 1.5f; 
     public float moveSpeed = 4f;
     public float nodeReachThreshold = 0.1f;
     public float pathUpdateInterval = 0.5f;
-    public float attackCooldown = 1f; // Cooldown antara serangan
-    public int attackDamage = 10; // Damage per serangan
-    public float attackMoveSpeed = 2f; // Kecepatan gerak saat attack untuk menjaga jarak
+    public float attackCooldown = 1f; 
+    public int attackDamage = 10; 
+    public float attackMoveSpeed = 2f; 
+
+    [Header("Advanced Attack Conditions")]
+    [Tooltip("Sudut maksimal (0-180) agar enemy dianggap menghadap player. Contoh: 45 derajat.")]
+    public float attackAngleThreshold = 45f;
+
+    [Tooltip("Beda ketinggian maksimal yang diperbolehkan untuk menyerang.")]
+    public float maxVerticalDifference = 1.0f;
+
+    [Tooltip("Gunakan Raycast untuk memastikan tidak ada tembok penghalang.")]
+    public bool useLineOfSight = true;
+
+    [Tooltip("Layer apa saja yang dianggap penghalang pandangan (misal: Default, Ground, Wall).")]
+    public LayerMask sightLayerMask;
+
+    [Tooltip("Offset posisi mata enemy untuk raycast.")]
+    public Vector3 sightOffset = new Vector3(0, 1.5f, 0);
 
     [Header("States")]
     public bool isChasing = false;
@@ -41,7 +57,6 @@ public class GhostAI : MonoBehaviour
             case 2: moveSpeed = 5f; chaseRange = 15f; break; // Hard
         }
 
-        // Auto-find references jika belum diassign
         if (player == null)
             player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
@@ -49,114 +64,203 @@ public class GhostAI : MonoBehaviour
             gridBuilder = FindObjectOfType<GridBuilder>();
 
         if (animator == null)
-            animator = GetComponent<Animator>(); // Mencoba ambil dari object sendiri
+            animator = GetComponent<Animator>(); 
 
         if (player != null)
-            playerHealth = player.GetComponent<PlayerHealth>(); // Ambil PlayerHealth dari player
+            playerHealth = player.GetComponent<PlayerHealth>(); 
 
         if (gridBuilder == null)
             Debug.LogError("GridBuilder tidak ditemukan! Pastikan ada GameObject dengan GridBuilder script di scene.");
 
         if (playerHealth == null)
             Debug.LogError("PlayerHealth tidak ditemukan pada player! Pastikan player memiliki script PlayerHealth.");
+            
+        // Default layer mask jika belum diset (Everything)
+        if (sightLayerMask == 0) 
+            sightLayerMask = -1; 
     }
 
     void Update()
     {
         if (player == null || gridBuilder == null || gridBuilder.grid == null) return;
 
-        // Cek jika player sudah mati, hentikan AI
         if (playerHealth != null && playerHealth.IsDead)
         {
-            SetAnimationState(true, false, false, false); // Set Idle
+            SetAnimationState(true, false, false, false); 
             return;
         }
 
-        // Gunakan jarak horizontal agar tidak terpengaruh perbedaan ketinggian (Y-axis)
+        // --- PERHITUNGAN JARAK ---
+        
+        // Jarak Horizontal (Flat) untuk logic chase/attack range dasar
         Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
         Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);
-        float distanceToPlayer = Vector3.Distance(enemyPosFlat, playerPosFlat);
+        float distanceToPlayerFlat = Vector3.Distance(enemyPosFlat, playerPosFlat);
 
-        // --- LOGIKA STATE ANIMASI & AI ---
+        // --- CEK KONDISI ATTACK ---
+        
+        // 1. Cek jarak attack (horizontal)
+        bool inAttackRange = distanceToPlayerFlat <= attackRange;
+        
+        // 2. Cek kondisi tambahan (Height, Angle, LOS)
+        bool validHeight = IsVerticalPositionValid();
+        bool facingPlayer = IsPlayerInFront();
+        bool hasLOS = HasLineOfSight();
 
-        // 1. Cek Attack (Prioritas Tertinggi)
-        if (distanceToPlayer <= attackRange)
+        // Syarat attack: Jarak masuk, tinggi aman, menghadap player, dan ada LOS
+        bool canAttack = inAttackRange && validHeight && facingPlayer && hasLOS;
+
+        // --- LOGIKA STATE MACHINE ---
+
+        if (canAttack)
         {
+            // --- STATE: ATTACK ---
             isAttacking = true;
             isChasing = false;
             
-            // Jaga jarak attackRange dari player
-            Vector3 directionToPlayer = (playerPosFlat - enemyPosFlat).normalized;
-            Vector3 targetPosition = player.position - directionToPlayer; // Target 1 unit dari player
-            targetPosition.y = transform.position.y; // Jaga tinggi tetap sesuai enemy
-            
-            transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
-            
-            // Rotasi menghadap player
-            if (directionToPlayer != Vector3.zero)
-            {
-                Quaternion lookRotation = Quaternion.LookRotation(directionToPlayer);
-                transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
-            }
-            
-            // Serang player jika cooldown habis
-            if (Time.time - lastAttackTime > attackCooldown)
-            {
-                if (playerHealth != null)
-                {
-                    playerHealth.TakeDamage(attackDamage);
-                    Debug.Log("Ghost menyerang player!");
-                }
-                lastAttackTime = Time.time;
-            }
-            
-            // Update Animasi ke Attack
-            SetAnimationState(false, false, false, true);
+            PerformAttackBehavior(playerPosFlat, enemyPosFlat);
         }
-        // 2. Cek Chase/Run (Jika dalam jangkauan tapi belum cukup dekat untuk attack)
-        else if (distanceToPlayer <= chaseRange)
+        else if (distanceToPlayerFlat <= chaseRange)
         {
+            // --- STATE: CHASE ---
+            // Masuk ke sini jika:
+            // a. Jarak > attackRange TAPI <= chaseRange
+            // b. Jarak <= attackRange TAPI salah satu kondisi (Height/Angle/LOS) gagal
+            //    (Dalam kasus b, enemy akan tetap mencoba mendekat/menghadap player)
+            
             isAttacking = false;
             isChasing = true;
 
-            // Update path secara periodik
-            if (Time.time - lastPathUpdateTime > pathUpdateInterval)
-            {
-                FindPathToPlayer();
-                lastPathUpdateTime = Time.time;
-            }
-
-            FollowPath();
-
-            // Update Animasi ke Run (karena sedang mengejar)
-            // Jika Anda ingin Walk saat speed pelan, bisa ubah logika ini
-            SetAnimationState(false, false, true, false);
+            PerformChaseBehavior();
         }
-        // 3. Idle (Di luar jangkauan)
         else
         {
+            // --- STATE: IDLE ---
             isAttacking = false;
             isChasing = false;
             currentPath = null;
 
-            // Update Animasi ke Idle
             SetAnimationState(true, false, false, false);
         }
     }
 
-    // Fungsi Helper untuk mengatur Animator Boolean agar rapi dan tidak tumpang tindih
+    // ------------------------------------------------------------------------
+    // BEHAVIOR FUNCTIONS
+    // ------------------------------------------------------------------------
+
+    void PerformAttackBehavior(Vector3 playerPosFlat, Vector3 enemyPosFlat)
+    {
+        // Jaga jarak attackRange dari player (sedikit mundur/maju biar pas)
+        Vector3 directionToPlayer = (playerPosFlat - enemyPosFlat).normalized;
+        
+        // Target posisi sedikit di depan player
+        Vector3 targetPosition = player.position - directionToPlayer * (attackRange * 0.5f); 
+        targetPosition.y = transform.position.y; // Jaga tinggi tetap sesuai enemy
+        
+        // Gerak perlahan saat attack (adjust positioning)
+        transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
+        
+        // Rotasi paksa menghadap player agar attack selalu valid
+        if (directionToPlayer != Vector3.zero)
+        {
+            Quaternion lookRotation = Quaternion.LookRotation(directionToPlayer);
+            transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 10f);
+        }
+        
+        // Eksekusi serangan jika cooldown habis
+        if (Time.time - lastAttackTime > attackCooldown)
+        {
+            if (playerHealth != null)
+            {
+                playerHealth.TakeDamage(attackDamage);
+                Debug.Log("Ghost menyerang player!");
+            }
+            lastAttackTime = Time.time;
+        }
+        
+        // Update Animasi ke Attack
+        SetAnimationState(false, false, false, true);
+    }
+
+    void PerformChaseBehavior()
+    {
+        // Update path secara periodik
+        if (Time.time - lastPathUpdateTime > pathUpdateInterval)
+        {
+            FindPathToPlayer();
+            lastPathUpdateTime = Time.time;
+        }
+
+        FollowPath();
+
+        // Update Animasi ke Run
+        SetAnimationState(false, false, true, false);
+    }
+
+    // ------------------------------------------------------------------------
+    // HELPER FUNCTIONS (VALIDATION)
+    // ------------------------------------------------------------------------
+
+    public bool IsVerticalPositionValid()
+    {
+        float verticalDiff = Mathf.Abs(transform.position.y - player.position.y);
+        return verticalDiff <= maxVerticalDifference;
+    }
+
+    public bool IsPlayerInFront()
+    {
+        Vector3 dirToPlayer = (player.position - transform.position).normalized;
+        // Abaikan Y axis untuk angle horizontal
+        dirToPlayer.y = 0;
+        Vector3 forwardFlat = transform.forward;
+        forwardFlat.y = 0;
+
+        if (dirToPlayer == Vector3.zero) return false;
+
+        float angle = Vector3.Angle(forwardFlat, dirToPlayer);
+        return angle <= attackAngleThreshold;
+    }
+
+    public bool HasLineOfSight()
+    {
+        if (!useLineOfSight) return true;
+
+        Vector3 origin = transform.position + sightOffset;
+        Vector3 target = player.position + sightOffset;
+        
+        Vector3 dir = target - origin;
+        float dist = dir.magnitude;
+
+        // Raycast ke arah player
+        if (Physics.Raycast(origin, dir.normalized, out RaycastHit hit, dist, sightLayerMask))
+        {
+            // Jika kena sesuatu, pastikan itu player atau bagian dari player
+            if (hit.transform == player || hit.transform.IsChildOf(player))
+            {
+                return true;
+            }
+            
+            // Jika kena tembok/objek lain -> pandangan terhalang
+            return false;
+        }
+
+        // Jika tidak kena apa-apa (misal layer mask hanya untuk Obstacle),
+        // berarti LOS clear (asumsi tidak ada obstacle).
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // ANIMATION & PATHFINDING
+    // ------------------------------------------------------------------------
+
     void SetAnimationState(bool idle, bool walk, bool run, bool attack)
     {
-        Debug.Log("Value of animator: " + animator);
         if (animator == null) return;
 
         animator.SetBool("Idle", idle);
         animator.SetBool("Walk", walk);
         animator.SetBool("Run", run);
         animator.SetBool("Attack", attack);
-
-        // Debug.Log($"[GhostAI] Animation State - Idle: {idle}, Walk: {walk}, Run: {run}, Attack: {attack}");
-        Debug.Log("Value of each state from animator: " + animator.GetBool("Idle") + animator.GetBool("Walk") + animator.GetBool("Run") + animator.GetBool("Attack"));
     }
 
     void FindPathToPlayer()
@@ -280,8 +384,14 @@ public class GhostAI : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, chaseRange);
 
-        // Visualisasi Attack Range
         Gizmos.color = Color.magenta;
         Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        // Visualisasi Attack Angle
+        Vector3 leftRay = Quaternion.Euler(0, -attackAngleThreshold, 0) * transform.forward;
+        Vector3 rightRay = Quaternion.Euler(0, attackAngleThreshold, 0) * transform.forward;
+        Gizmos.color = Color.blue;
+        Gizmos.DrawRay(transform.position, leftRay * attackRange);
+        Gizmos.DrawRay(transform.position, rightRay * attackRange);
     }
 }
