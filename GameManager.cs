@@ -213,9 +213,7 @@ public class GameManager : MonoBehaviour
             cc.enabled = false;
             player.transform.position = lastCheckpointPos;
             cc.enabled = true;
-        }
-        else
-        {
+        }else{
             // FIX: Handle Rigidbody teleportation explicitly
             // Jika player menggunakan Rigidbody (seperti di MovementLogic), transform.position saja kadang gagal
             // terutama jika Rigidbody Interpolation aktif.
