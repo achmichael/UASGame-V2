@@ -141,10 +141,33 @@ public class PlayerHealth : MonoBehaviour
         IsDead = false;
         currentHealth = maxHealth;
         isDamaged = false;
-
         if (animator != null)
         {
+            // Reset semua parameter animator
             animator.SetBool("Death", false);
+            animator.SetBool("Walk", false);
+            animator.SetBool("Run", false);
+            animator.SetBool("Jump", false);
+            animator.SetBool("Attack", false);
+            animator.SetBool("AimMode", false);
+            
+            // Logging untuk mengecek value dari setiap parameter
+            Debug.Log("=== Animator Parameters After Respawn ===");
+            Debug.Log($"Death: {animator.GetBool("Death")}");
+            Debug.Log($"Walk: {animator.GetBool("Walk")}");
+            Debug.Log($"Run: {animator.GetBool("Run")}");
+            Debug.Log($"Jump: {animator.GetBool("Jump")}");
+            Debug.Log($"Attack: {animator.GetBool("Attack")}");
+            Debug.Log($"AimMode: {animator.GetBool("AimMode")}");
+            Debug.Log("=========================================");
+        }
+
+        // Re-enable MovementLogic jika di-disable saat death
+        MovementLogic movementLogic = GetComponent<MovementLogic>();
+        if (movementLogic != null)
+        {
+            movementLogic.enabled = true;
+             movementLogic.ResetForRespawn();
         }
 
         // Mulai invulnerability

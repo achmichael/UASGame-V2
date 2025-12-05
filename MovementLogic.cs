@@ -374,6 +374,39 @@ public class MovementLogic : MonoBehaviour
         anim.SetBool("Walk", isMoving && !isRunning);
         anim.SetBool("Run", isRunning);
     }
+
+    public void ResetForRespawn()
+{
+    // Reset input & arah gerak
+    horizontalInput = 0f;
+    verticalInput = 0f;
+    moveDirection = Vector3.zero;
+    jumpDirection = Vector3.zero;
+
+    // Reset fisika
+    if (rb != null)
+    {
+        rb.velocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+    }
+
+    // Reset state ground/stair
+    grounded = true;
+    isOnStair = false;
+    aerialBoost = true;
+
+    // Reset animator bool yang dipakai MovementLogic
+    if (anim != null)
+    {
+        anim.SetBool("Walk", false);
+        anim.SetBool("Run", false);
+        anim.SetBool("Jump", false);
+        anim.SetBool("Attack", false);
+        anim.SetBool("WalkShoot", false);
+        anim.SetBool("AimMode", false);
+    }
+}
+
     
     /// <summary>
     /// Handle player damage
