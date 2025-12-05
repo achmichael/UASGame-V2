@@ -112,6 +112,7 @@ public class LogicScene : MonoBehaviour
 
     public void TryAgain()
     {
+        Debug.Log("LogicScene.TryAgain invoked");
         Time.timeScale = 1f;
         SceneManager.LoadScene(GameplayScene);
     }

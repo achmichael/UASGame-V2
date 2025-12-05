@@ -201,7 +201,7 @@ public class GameManager : MonoBehaviour
 
         if (playerLives <= 0 && shouldLoseLife)
         {
-            SceneManager.LoadScene("GameOverScene");
+            SceneManager.LoadScene("Gameover");
             return;
         }
 
