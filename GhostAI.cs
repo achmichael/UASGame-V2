@@ -1,31 +1,23 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class GhostAI : MonoBehaviour
 {
     [Header("References")]
     public Transform player;
-    public GridBuilder gridBuilder;
     public Animator animator; 
-    private PlayerHealth playerHealth; 
+    private PlayerHealth playerHealth;
+    private NavMeshAgent agent;
 
     [Header("AI Settings")]
     public float chaseRange = 12f;
     public float attackRange = 1.5f; 
     public float moveSpeed = 4f;
-    public float nodeReachThreshold = 0.1f;
-    public float pathUpdateInterval = 0.5f;
     public float attackCooldown = 1f; 
-    public int attackDamage = 10; 
-    public float attackMoveSpeed = 2f; 
-    [Tooltip("Jarak di mana enemy akan selalu memutar badan menghadap player.")]
-    public float facePlayerDistance = 5.0f;
-
-    [Tooltip("Jarak minimal yang dijaga enemy dari player saat menyerang (agar tidak clipping).")]
-    public float minCombatDistance = 1.0f;
-
-    [Header("Advanced Attack Conditions")]
+    public int attackDamage = 10;
+    
     [Tooltip("Sudut maksimal (0-180) agar enemy dianggap menghadap player.")]
     public float frontAngleThreshold = 60f;
 
@@ -38,41 +30,74 @@ public class GhostAI : MonoBehaviour
     [Tooltip("Layer apa saja yang dianggap penghalang pandangan (misal: Default, Ground, Wall).")]
     public LayerMask obstacleMask;
 
+    [Header("NavMesh Settings")]
+    [Tooltip("Kecepatan angular untuk rotasi NavMeshAgent")]
+    public float angularSpeed = 720f;
+    
+    [Tooltip("Akselerasi NavMeshAgent")]
+    public float acceleration = 8f;
+
+    [Tooltip("Base offset untuk menyesuaikan tinggi enemy dari NavMesh (0 = default, positif = naik, negatif = turun)")]
+    public float baseOffset = 0f;
+
     [Header("States")]
     public bool isChasing = false;
     public bool isAttacking = false;
 
-    // Pathfinding
-    private List<Node> currentPath;
-    private int currentPathIndex = 0;
-    private float lastPathUpdateTime;
+    // Tracking
     private float lastAttackTime;
 
     void Start()
     {
+        // Setup NavMeshAgent
+        agent = GetComponent<NavMeshAgent>();
+        if (agent == null) 
+        {
+            agent = gameObject.AddComponent<NavMeshAgent>();
+            Debug.LogWarning("NavMeshAgent tidak ditemukan, otomatis ditambahkan ke " + gameObject.name);
+        }
+
+        // Adjust difficulty settings
         int difficulty = PlayerPrefs.GetInt("Difficulty", 0);
 
         switch (difficulty)
         {
-            case 0: moveSpeed = 3f; chaseRange = 8f; break;  // Easy
-            case 1: moveSpeed = 4f; chaseRange = 12f; break; // Normal
-            case 2: moveSpeed = 5f; chaseRange = 15f; break; // Hard
+            case 0: // Easy
+                moveSpeed = 3f; 
+                chaseRange = 8f; 
+                break;
+            case 1: // Normal
+                moveSpeed = 4f; 
+                chaseRange = 12f; 
+                break;
+            case 2: // Hard
+                moveSpeed = 5f; 
+                chaseRange = 15f; 
+                break;
         }
 
+        // Setup NavMeshAgent parameters
+        agent.speed = moveSpeed;
+        agent.angularSpeed = angularSpeed;
+        agent.acceleration = acceleration;
+        agent.stoppingDistance = attackRange;
+        agent.updateRotation = false; // Kita handle rotasi manual untuk kontrol lebih halus
+        agent.baseOffset = baseOffset; // Sesuaikan tinggi enemy dari NavMesh
+
+        // Find player reference
         if (player == null)
             player = GameObject.FindGameObjectWithTag("Player")?.transform;
 
-        if (gridBuilder == null)
-            gridBuilder = FindObjectOfType<GridBuilder>();
-
+        // Get components
         if (animator == null)
             animator = GetComponent<Animator>(); 
 
         if (player != null)
             playerHealth = player.GetComponent<PlayerHealth>(); 
 
-        if (gridBuilder == null)
-            Debug.LogError("GridBuilder tidak ditemukan! Pastikan ada GameObject dengan GridBuilder script di scene.");
+        // Validation
+        if (player == null)
+            Debug.LogError("Player tidak ditemukan! Pastikan player memiliki tag 'Player'.");
 
         if (playerHealth == null)
             Debug.LogError("PlayerHealth tidak ditemukan pada player! Pastikan player memiliki script PlayerHealth.");
@@ -84,18 +109,21 @@ public class GhostAI : MonoBehaviour
 
     void Update()
     {
-        if (player == null || gridBuilder == null || gridBuilder.grid == null) return;
+        if (player == null || agent == null) return;
 
         if (playerHealth != null && playerHealth.IsDead)
         {
-            SetAnimationState(true, false, false, false); 
+            agent.isStopped = true;
+            SetAnimationState(false, false, false); 
             return;
         }
+
+        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
         // --- LOGIKA STATE MACHINE ---
 
         // Cek apakah bisa menyerang (semua kondisi terpenuhi)
-        if (CanAttackPlayer())
+        if (distanceToPlayer <= attackRange && CanAttackPlayer())
         {
             // --- STATE: ATTACK ---
             isAttacking = true;
@@ -103,31 +131,26 @@ public class GhostAI : MonoBehaviour
             
             PerformAttackBehavior();
         }
+        else if (distanceToPlayer <= chaseRange)
+        {
+            // --- STATE: CHASE ---
+            isAttacking = false;
+            isChasing = true;
+
+            PerformChaseBehavior();
+        }
         else
         {
-            // Cek apakah masuk range chase (menggunakan jarak horizontal saja)
-            Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
-            Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);
-            float distanceToPlayerFlat = Vector3.Distance(enemyPosFlat, playerPosFlat);
-
-            if (distanceToPlayerFlat <= chaseRange)
-            {
-                // --- STATE: CHASE ---
-                isAttacking = false;
-                isChasing = true;
-
-                PerformChaseBehavior();
-            }
-            else
-            {
-                // --- STATE: IDLE ---
-                isAttacking = false;
-                isChasing = false;
-                currentPath = null;
-
-                SetAnimationState(true, false, false, false);
-            }
+            // --- STATE: IDLE ---
+            isAttacking = false;
+            isChasing = false;
+            
+            agent.isStopped = true;
+            SetAnimationState(false, false, false);
         }
+
+        // Manual rotation for smoother look at player
+        HandleRotation();
     }
 
     // ------------------------------------------------------------------------
@@ -136,26 +159,8 @@ public class GhostAI : MonoBehaviour
 
     void PerformAttackBehavior()
     {
-        Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
-        Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);
-
-        // Jaga jarak attackRange dari player (sedikit mundur/maju biar pas)
-        Vector3 directionToPlayer = (playerPosFlat - enemyPosFlat).normalized;
-        
-        // Target posisi sedikit di depan player berdasarkan minCombatDistance
-        // Agar enemy tidak menabrak/clipping dengan player
-        Vector3 targetPosition = player.position - directionToPlayer * minCombatDistance; 
-        targetPosition.y = transform.position.y; // Jaga tinggi tetap sesuai enemy
-        
-        // Gerak perlahan saat attack (adjust positioning)
-        transform.position = Vector3.MoveTowards(transform.position, targetPosition, attackMoveSpeed * Time.deltaTime);
-        
-        // Rotasi paksa menghadap player agar attack selalu valid
-        if (directionToPlayer != Vector3.zero)
-        {
-            Quaternion lookRotation = Quaternion.LookRotation(directionToPlayer);
-            transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 10f);
-        }
+        // Stop NavMeshAgent saat menyerang
+        agent.isStopped = true;
         
         // Eksekusi serangan jika cooldown habis
         if (Time.time - lastAttackTime > attackCooldown)
@@ -169,22 +174,35 @@ public class GhostAI : MonoBehaviour
         }
         
         // Update Animasi ke Attack
-        SetAnimationState(false, false, false, true);
+        SetAnimationState(false, false, true);
     }
 
     void PerformChaseBehavior()
     {
-        // Update path secara periodik
-        if (Time.time - lastPathUpdateTime > pathUpdateInterval)
+        // Set destination NavMeshAgent ke player
+        agent.isStopped = false;
+        agent.SetDestination(player.position);
+
+        // Tentukan animasi berdasarkan kecepatan agent
+        bool isMoving = agent.velocity.sqrMagnitude > 0.1f;
+        
+        // Update Animasi ke Run saat bergerak
+        SetAnimationState(false, isMoving, false);
+    }
+
+    void HandleRotation()
+    {
+        if (player == null) return;
+
+        // Rotasi manual untuk menghadap player (hanya sumbu Y)
+        Vector3 direction = (player.position - transform.position).normalized;
+        direction.y = 0; // Pastikan hanya rotasi horizontal
+
+        if (direction.sqrMagnitude > 0.001f)
         {
-            FindPathToPlayer();
-            lastPathUpdateTime = Time.time;
+            Quaternion lookRotation = Quaternion.LookRotation(direction);
+            transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, 10f * Time.deltaTime);
         }
-
-        FollowPath();
-
-        // Update Animasi ke Run
-        SetAnimationState(false, false, true, false);
     }
 
     // ------------------------------------------------------------------------
@@ -198,14 +216,7 @@ public class GhostAI : MonoBehaviour
     {
         if (player == null) return false;
 
-        // 1. Cek Jarak Horizontal
-        Vector3 playerPosFlat = new Vector3(player.position.x, 0, player.position.z);
-        Vector3 enemyPosFlat = new Vector3(transform.position.x, 0, transform.position.z);
-        float distance = Vector3.Distance(enemyPosFlat, playerPosFlat);
-
-        if (distance > attackRange) return false;
-
-        // 2. Cek Kondisi Lainnya
+        // Cek kondisi untuk menyerang
         return IsPlayerInFront() && IsVerticalPositionValid() && HasLineOfSight();
     }
 
@@ -271,164 +282,31 @@ public class GhostAI : MonoBehaviour
     }
 
     // ------------------------------------------------------------------------
-    // ANIMATION & PATHFINDING
+    // ANIMATION
     // ------------------------------------------------------------------------
 
-    void SetAnimationState(bool idle, bool walk, bool run, bool attack)
+    void SetAnimationState(bool walk, bool run, bool attack)
     {
         if (animator == null) return;
 
-        animator.SetBool("Idle", idle);
         animator.SetBool("Walk", walk);
         animator.SetBool("Run", run);
         animator.SetBool("Attack", attack);
     }
 
-    void FindPathToPlayer()
-    {
-        Node startNode = gridBuilder.GetNodeFromWorldPosition(transform.position);
-        Node targetNode = gridBuilder.GetNodeFromWorldPosition(player.position);
-
-        if (startNode == null || targetNode == null || !targetNode.isWalkable)
-        {
-            currentPath = null;
-            return;
-        }
-
-        currentPath = Dijkstra(startNode, targetNode);
-        currentPathIndex = 0;
-    }
-
-    List<Node> Dijkstra(Node start, Node target)
-    {
-        Dictionary<Node, float> distances = new Dictionary<Node, float>();
-        Dictionary<Node, Node> previous = new Dictionary<Node, Node>();
-        List<Node> unvisited = new List<Node>();
-
-        foreach (Node node in gridBuilder.grid)
-        {
-            if (node == null) continue;
-
-            distances[node] = float.MaxValue;
-            unvisited.Add(node);
-        }
-        distances[start] = 0;
-
-        while (unvisited.Count > 0)
-        {
-            Node current = null;
-            float smallestDistance = float.MaxValue;
-            foreach (Node node in unvisited)
-            {
-                if (distances[node] < smallestDistance)
-                {
-                    smallestDistance = distances[node];
-                    current = node;
-                }
-            }
-
-            if (current == null || current == target)
-                break;
-
-            unvisited.Remove(current);
-
-            if (current.neighbors != null)
-            {
-                foreach (Node neighbor in current.neighbors)
-                {
-                    if (!unvisited.Contains(neighbor)) continue;
-
-                    float distance = Vector3.Distance(current.position, neighbor.position);
-                    float alt = distances[current] + distance;
-
-                    if (alt < distances[neighbor])
-                    {
-                        distances[neighbor] = alt;
-                        previous[neighbor] = current;
-                    }
-                }
-            }
-        }
-
-        List<Node> path = new List<Node>();
-        Node temp = target;
-
-        while (previous.ContainsKey(temp))
-        {
-            path.Add(temp);
-            temp = previous[temp];
-        }
-
-        path.Reverse();
-        return path.Count > 0 ? path : null;
-    }
-
-    void FollowPath()
-    {
-        if (currentPath == null || currentPath.Count == 0) return;
-
-        if (currentPathIndex >= currentPath.Count)
-        {
-            currentPath = null;
-            return;
-        }
-
-        Node targetNode = currentPath[currentPathIndex];
-        Vector3 targetPosition = new Vector3(targetNode.position.x, transform.position.y, targetNode.position.z);
-
-        transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
-
-        // --- ROTATION LOGIC ---
-        Vector3 lookDirection;
-        float distToPlayer = Vector3.Distance(transform.position, player.position);
-
-        // Jika dalam jarak tertentu, selalu menghadap player (agar tidak membelakangi)
-        if (distToPlayer <= facePlayerDistance)
-        {
-            lookDirection = (player.position - transform.position).normalized;
-        }
-        else
-        {
-            // Jika jauh, hadap ke arah node tujuan
-            lookDirection = (targetPosition - transform.position).normalized;
-        }
-
-        lookDirection.y = 0; // Pastikan rotasi hanya pada sumbu Y (horizontal)
-
-        if (lookDirection != Vector3.zero)
-        {
-            Quaternion lookRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
-        }
-
-        if (Vector3.Distance(transform.position, targetPosition) < nodeReachThreshold)
-        {
-            currentPathIndex++;
-        }
-    }
+    // ------------------------------------------------------------------------
+    // GIZMOS FOR DEBUGGING
+    // ------------------------------------------------------------------------
 
     void OnDrawGizmosSelected()
     {
-        if (currentPath != null && currentPath.Count > 0)
-        {
-            Gizmos.color = Color.yellow;
-            for (int i = 0; i < currentPath.Count - 1; i++)
-            {
-                Gizmos.DrawLine(currentPath[i].position, currentPath[i + 1].position);
-            }
-        }
-
+        // Chase Range
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, chaseRange);
 
+        // Attack Range
         Gizmos.color = Color.magenta;
         Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        Gizmos.color = new Color(1f, 0.5f, 0f); // Orange
-        Gizmos.DrawWireSphere(transform.position, minCombatDistance);
-
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(transform.position, facePlayerDistance);
 
         // Visualisasi Attack Angle
         Vector3 leftRay = Quaternion.Euler(0, -frontAngleThreshold, 0) * transform.forward;
@@ -436,5 +314,16 @@ public class GhostAI : MonoBehaviour
         Gizmos.color = Color.blue;
         Gizmos.DrawRay(transform.position, leftRay * attackRange);
         Gizmos.DrawRay(transform.position, rightRay * attackRange);
+
+        // NavMesh Path (if available)
+        if (agent != null && agent.hasPath)
+        {
+            Gizmos.color = Color.yellow;
+            Vector3[] corners = agent.path.corners;
+            for (int i = 0; i < corners.Length - 1; i++)
+            {
+                Gizmos.DrawLine(corners[i], corners[i + 1]);
+            }
+        }
     }
 }
