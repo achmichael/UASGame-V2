@@ -151,6 +151,10 @@ public class PlayerHealth : MonoBehaviour
             animator.SetBool("Attack", false);
             animator.SetBool("AimMode", false);
             
+            // PENTING: Force transisi ke Idle state untuk keluar dari Death
+            // CrossFade lebih smooth daripada Play
+            animator.CrossFade("Idle", 0.1f, 0, 0f);
+            
             // Logging untuk mengecek value dari setiap parameter
             Debug.Log("=== Animator Parameters After Respawn ===");
             Debug.Log($"Death: {animator.GetBool("Death")}");
@@ -158,7 +162,7 @@ public class PlayerHealth : MonoBehaviour
             Debug.Log($"Run: {animator.GetBool("Run")}");
             Debug.Log($"Jump: {animator.GetBool("Jump")}");
             Debug.Log($"Attack: {animator.GetBool("Attack")}");
-            Debug.Log($"AimMode: {animator.GetBool("AimMode")}");
+            Debug.Log($"Current State: {animator.GetCurrentAnimatorStateInfo(0).IsName("Idle")}");
             Debug.Log("=========================================");
         }
 
@@ -167,7 +171,7 @@ public class PlayerHealth : MonoBehaviour
         if (movementLogic != null)
         {
             movementLogic.enabled = true;
-             movementLogic.ResetForRespawn();
+            movementLogic.ResetForRespawn();
         }
 
         // Mulai invulnerability
