@@ -351,12 +351,10 @@ public class MovementLogic : MonoBehaviour
         {
             bool isMoving = moveDirection.magnitude > 0.1f;
             
-            anim.SetBool("WalkShoot", isMoving);
             anim.SetBool("Attack", !isMoving);
         }
         else
         {
-            anim.SetBool("WalkShoot", false);
             anim.SetBool("Attack", false);
         }
     }
@@ -402,8 +400,6 @@ public class MovementLogic : MonoBehaviour
         anim.SetBool("Run", false);
         anim.SetBool("Jump", false);
         anim.SetBool("Attack", false);
-        anim.SetBool("WalkShoot", false);
-        anim.SetBool("AimMode", false);
     }
 }
 

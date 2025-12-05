@@ -216,6 +216,17 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            // FIX: Handle Rigidbody teleportation explicitly
+            // Jika player menggunakan Rigidbody (seperti di MovementLogic), transform.position saja kadang gagal
+            // terutama jika Rigidbody Interpolation aktif.
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.position = lastCheckpointPos;
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+            
             player.transform.position = lastCheckpointPos;
         }
 
