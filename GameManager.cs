@@ -38,6 +38,75 @@ public class GameManager : MonoBehaviour
         }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Subscribe ke event scene loaded untuk refresh UI references
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDestroy()
+    {
+        // Unsubscribe untuk mencegah memory leak
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    /// <summary>
+    /// Dipanggil setiap kali scene baru di-load
+    /// Refresh semua UI references yang mungkin sudah null
+    /// </summary>
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"[GameManager] Scene loaded: {scene.name}, Mode: {mode}");
+
+        // Skip refresh jika ini adalah scene additive (seperti Pause)
+        if (mode == LoadSceneMode.Additive)
+        {
+            return;
+        }
+
+        // Delay sedikit untuk memastikan semua object sudah terinisialisasi
+        StartCoroutine(RefreshUIReferencesDelayed());
+    }
+
+    /// <summary>
+    /// Refresh UI references dengan sedikit delay
+    /// </summary>
+    private System.Collections.IEnumerator RefreshUIReferencesDelayed()
+    {
+        // Tunggu 1 frame agar semua Awake() dan Start() object lain selesai
+        yield return null;
+
+        RefreshUIReferences();
+        UpdateHUD();
+        UpdateHealthIndicator();
+    }
+
+    /// <summary>
+    /// Refresh semua references UI (HUDController, HealthIndicator)
+    /// Dipanggil saat scene berganti atau manual jika diperlukan
+    /// </summary>
+    public void RefreshUIReferences()
+    {
+        // Re-find HUDController di scene baru
+        hudController = FindObjectOfType<HUDController>();
+        if (hudController != null)
+        {
+            Debug.Log("[GameManager] HUDController found and assigned!");
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] HUDController tidak ditemukan di scene ini.");
+        }
+
+        // Re-find HealthIndicator di scene baru
+        healthIndicator = FindObjectOfType<HealthIndicator>();
+        if (healthIndicator != null)
+        {
+            Debug.Log("[GameManager] HealthIndicator found and assigned!");
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] HealthIndicator tidak ditemukan di scene ini.");
+        }
     }
 
     void Start()
@@ -268,8 +337,13 @@ public class GameManager : MonoBehaviour
     {
         if (healthIndicator != null)
         {
-            healthIndicator.UpdateHealth(playerLives);
+            // Gunakan ForceUpdateHealth untuk memastikan icon selalu ditampilkan
+            healthIndicator.ForceUpdateHealth(playerLives);
             Debug.Log($"[GameManager] Health indicator updated: {playerLives} lives");
+        }
+        else
+        {
+            Debug.LogWarning($"[GameManager] healthIndicator is NULL, cannot update health UI");
         }
     }
 

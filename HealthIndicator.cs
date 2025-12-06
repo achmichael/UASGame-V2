@@ -35,11 +35,36 @@ public class HealthIndicator : MonoBehaviour
     void Start()
     {
         // Validasi di Start
-        ValidateReferences();
+        bool isValid = ValidateReferences();
         
-        if (showDebugLog)
+        Debug.Log($"[HealthIndicator] Initialized. References valid: {isValid}");
+        Debug.Log($"[HealthIndicator] iconPrefab: {(iconPrefab != null ? iconPrefab.name : "NULL")}");
+        Debug.Log($"[HealthIndicator] parentPanel: {(parentPanel != null ? parentPanel.name : "NULL")}");
+
+        // Minta GameManager untuk refresh references dan update health indicator
+        // Ini mengatasi masalah saat GameManager sudah ada (DontDestroyOnLoad)
+        // tapi HealthIndicator baru saja di-instantiate di scene baru
+        if (GameManager.Instance != null)
         {
-            Debug.Log("[HealthIndicator] Initialized successfully");
+            GameManager.Instance.RefreshUIReferences();
+        }
+    }
+
+    void OnEnable()
+    {
+        // Juga refresh saat di-enable
+        if (GameManager.Instance != null)
+        {
+            StartCoroutine(RequestUpdateNextFrame());
+        }
+    }
+
+    private System.Collections.IEnumerator RequestUpdateNextFrame()
+    {
+        yield return null;
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.RefreshUIReferences();
         }
     }
     
@@ -54,6 +79,8 @@ public class HealthIndicator : MonoBehaviour
     /// <param name="currentHealth">Jumlah health saat ini (akan generate sejumlah icon ini)</param>
     public void UpdateHealth(int currentHealth)
     {
+        Debug.Log($"[HealthIndicator] UpdateHealth called with: {currentHealth}, current displayed: {currentDisplayedHealth}");
+        
         // Validasi input
         if (currentHealth < 0)
         {
@@ -62,7 +89,7 @@ public class HealthIndicator : MonoBehaviour
         }
         
         // Cek apakah ada perubahan
-        if (currentHealth == currentDisplayedHealth)
+        if (currentHealth == currentDisplayedHealth && healthIcons.Count > 0)
         {
             if (showDebugLog)
             {
@@ -87,10 +114,30 @@ public class HealthIndicator : MonoBehaviour
         // Update tracker
         currentDisplayedHealth = currentHealth;
         
-        if (showDebugLog)
+        Debug.Log($"[HealthIndicator] Health updated to: {currentHealth}, icons count: {healthIcons.Count}");
+    }
+    
+    /// <summary>
+    /// Force update health indicator, mengabaikan cek perubahan
+    /// Gunakan saat ingin memastikan icon ditampilkan
+    /// </summary>
+    public void ForceUpdateHealth(int currentHealth)
+    {
+        Debug.Log($"[HealthIndicator] ForceUpdateHealth called with: {currentHealth}");
+        
+        if (currentHealth < 0) currentHealth = 0;
+        
+        if (!ValidateReferences())
         {
-            Debug.Log($"[HealthIndicator] Health updated to: {currentHealth}");
+            Debug.LogError("[HealthIndicator] Cannot force update - missing references!");
+            return;
         }
+        
+        ClearAllIcons();
+        GenerateHealthIcons(currentHealth);
+        currentDisplayedHealth = currentHealth;
+        
+        Debug.Log($"[HealthIndicator] Force updated to: {currentHealth}, icons: {healthIcons.Count}");
     }
     
     /// <summary>
