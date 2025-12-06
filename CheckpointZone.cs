@@ -53,24 +53,14 @@ public class CheckpointZone : MonoBehaviour
         // =============================================================
         // ✨ FITUR TAMBAHAN (UPDATE): Hentikan musuh mengejar player
         // -------------------------------------------------------------
-        // Penjelasan:
-        // - Ketika player memasuki area checkpoint (baik checkpoint baru
-        //   maupun checkpoint yang sudah aktif sebelumnya),
-        //   semua musuh diberi sinyal untuk "kehilangan jejak".
-        // - Cara kerjanya: memanggil method SetCheckpointState(true)
-        //   pada setiap EnemyLogicSementara.
-        // - Dengan ini, AI musuh berhenti mengejar sampai player keluar
-        //   dari checkpoint.
-        // =============================================================
         if (other.CompareTag("Player"))
         {
-            // Cari semua enemy yang menggunakan EnemyLogicSementara
-            EnemyLogicSementara[] enemies = FindObjectsOfType<EnemyLogicSementara>();
-
-            // Aktifkan mode "player berada di checkpoint"
-            foreach (var e in enemies)
+            // Set status safe pada player
+            // GhostAI akan membaca status ini dan berhenti mengejar
+            MovementLogic playerMovement = other.GetComponent<MovementLogic>();
+            if (playerMovement != null)
             {
-                e.SetCheckpointState(true); // Enemy kehilangan jejak
+                playerMovement.isSafe = true;
             }
         }
     }
@@ -80,18 +70,13 @@ public class CheckpointZone : MonoBehaviour
         // =============================================================
         // ✨ FITUR TAMBAHAN (UPDATE): Musuh kembali bisa mengejar
         // -------------------------------------------------------------
-        // Penjelasan:
-        // - Saat player keluar dari area checkpoint,
-        //   AI musuh diaktifkan kembali (bisa mengejar).
-        // - Ini menjaga perilaku enemy tetap dinamis.
-        // =============================================================
         if (other.CompareTag("Player"))
         {
-            EnemyLogicSementara[] enemies = FindObjectsOfType<EnemyLogicSementara>();
-
-            foreach (var e in enemies)
+            // Set status safe pada player
+            MovementLogic playerMovement = other.GetComponent<MovementLogic>();
+            if (playerMovement != null)
             {
-                e.SetCheckpointState(false); // Enemy mulai mengejar lagi
+                playerMovement.isSafe = false;
             }
         }
     }

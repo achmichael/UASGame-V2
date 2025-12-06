@@ -276,13 +276,28 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Teleport player ke last checkpoint
+        // Tentukan posisi respawn
+        Vector3 targetRespawnPos = lastCheckpointPos; // Default ke checkpoint terakhir
+
+        // Coba cari LabyrinthSpawnManager untuk respawn random
+        LabyrinthSpawnManager spawnManager = FindObjectOfType<LabyrinthSpawnManager>();
+        if (spawnManager != null)
+        {
+            Vector3 randomPos = spawnManager.GetPlayerRespawnPosition();
+            if (randomPos != Vector3.zero)
+            {
+                targetRespawnPos = randomPos;
+                Debug.Log("[GameManager] Respawning at RANDOM position: " + targetRespawnPos);
+            }
+        }
+
+        // Teleport player ke posisi respawn
         CharacterController cc = player.GetComponent<CharacterController>();
         if (cc != null)
         {
             // disable controller temporarily to avoid collision/overlap issues
             cc.enabled = false;
-            player.transform.position = lastCheckpointPos;
+            player.transform.position = targetRespawnPos;
             cc.enabled = true;
         }
         else
@@ -293,12 +308,12 @@ public class GameManager : MonoBehaviour
             Rigidbody rb = player.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.position = lastCheckpointPos;
+                rb.position = targetRespawnPos;
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
 
-            player.transform.position = lastCheckpointPos;
+            player.transform.position = targetRespawnPos;
         }
 
         UpdateHUD();

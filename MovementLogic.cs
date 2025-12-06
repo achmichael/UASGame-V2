@@ -43,6 +43,7 @@ public class MovementLogic : MonoBehaviour
     public bool TPSMode = true;
     public bool AimMode = false;
     public float HitPoints = 100f;
+    public bool isSafe = false; // Status apakah player berada di safe zone (checkpoint)
 
     [Header("Combat Settings")]
     public float attackRange = 50f;

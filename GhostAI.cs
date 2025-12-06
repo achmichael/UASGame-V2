@@ -10,6 +10,7 @@ public class GhostAI : MonoBehaviour
     public Animator animator;
     public GridBuilder gridBuilder;
     private PlayerHealth playerHealth;
+    private MovementLogic playerMovement; // Reference to player movement logic
     private NavMeshAgent agent;
 
     [Header("AI Settings")]
@@ -52,10 +53,13 @@ public class GhostAI : MonoBehaviour
     [Header("States")]
     public bool isChasing = false;
     public bool isAttacking = false;
+    public bool isWandering = false;
 
     // Tracking
     private float lastAttackTime;
     private float lastPathUpdateTime;
+    private Vector3 wanderTarget;
+    private bool hasWanderTarget = false;
     
     // Pathfinding
     private List<Node> currentPath;
@@ -110,7 +114,10 @@ public class GhostAI : MonoBehaviour
             gridBuilder = FindObjectOfType<GridBuilder>();
 
         if (player != null)
+        {
             playerHealth = player.GetComponent<PlayerHealth>(); 
+            playerMovement = player.GetComponent<MovementLogic>();
+        }
 
         // Validation
         if (player == null)
@@ -141,43 +148,95 @@ public class GhostAI : MonoBehaviour
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
+        // Check if player is in safe zone
+        bool isPlayerSafe = (playerMovement != null && playerMovement.isSafe);
+
         // --- LOGIKA STATE MACHINE ---
 
         // Cek apakah bisa menyerang (semua kondisi terpenuhi)
-        if (distanceToPlayer <= attackRange && CanAttackPlayer())
+        if (distanceToPlayer <= attackRange && CanAttackPlayer() && !isPlayerSafe)
         {
             // --- STATE: ATTACK ---
             isAttacking = true;
             isChasing = false;
+            isWandering = false;
             
             PerformAttackBehavior();
         }
-        else if (distanceToPlayer <= chaseRange)
+        else if (distanceToPlayer <= chaseRange && !isPlayerSafe)
         {
             // --- STATE: CHASE ---
             isAttacking = false;
             isChasing = true;
+            isWandering = false;
 
             PerformChaseBehavior();
         }
         else
         {
-            // --- STATE: IDLE ---
+            // --- STATE: WANDER (IDLE REPLACEMENT) ---
             isAttacking = false;
             isChasing = false;
+            isWandering = true;
             
-            agent.isStopped = true;
-            currentPath = null;
-            SetAnimationState(false, false, false);
+            PerformWanderBehavior();
         }
 
         // Manual rotation for smoother look at player
-        HandleRotation();
+        if (!isWandering)
+        {
+            HandleRotation();
+        }
     }
 
     // ------------------------------------------------------------------------
     // BEHAVIOR FUNCTIONS
     // ------------------------------------------------------------------------
+
+    void PerformWanderBehavior()
+    {
+        // If no target or reached target, pick new one
+        if (!hasWanderTarget || Vector3.Distance(transform.position, wanderTarget) < nodeReachThreshold)
+        {
+            PickRandomWanderTarget();
+        }
+
+        // Move to target
+        if (hasWanderTarget)
+        {
+             // Use Dijkstra to be consistent with Chase
+             if (Time.time - lastPathUpdateTime > pathUpdateInterval)
+             {
+                 CalculatePathToTarget(wanderTarget);
+                 lastPathUpdateTime = Time.time;
+             }
+             FollowCalculatedPath();
+             
+             bool isMoving = agent.velocity.sqrMagnitude > 0.1f;
+             SetAnimationState(false, isMoving, false);
+        }
+    }
+
+    void PickRandomWanderTarget()
+    {
+        // Pick random node from grid
+        if (gridBuilder != null && gridBuilder.grid != null)
+        {
+             // Try 10 times to find a walkable node
+             for(int i=0; i<10; i++)
+             {
+                 int x = Random.Range(0, gridBuilder.gridWidth);
+                 int z = Random.Range(0, gridBuilder.gridHeight);
+                 Node node = gridBuilder.grid[x,z];
+                 if (node != null && node.isWalkable)
+                 {
+                     wanderTarget = node.position;
+                     hasWanderTarget = true;
+                     return;
+                 }
+             }
+        }
+    }
 
     void PerformAttackBehavior()
     {
@@ -204,7 +263,7 @@ public class GhostAI : MonoBehaviour
         // Update path secara periodik menggunakan Dijkstra
         if (Time.time - lastPathUpdateTime > pathUpdateInterval)
         {
-            CalculatePathUsingDijkstra();
+            CalculatePathToTarget(player.position);
             lastPathUpdateTime = Time.time;
         }
 
@@ -238,10 +297,10 @@ public class GhostAI : MonoBehaviour
     // ------------------------------------------------------------------------
 
     /// <summary>
-    /// Hitung path dari enemy ke player menggunakan algoritma Dijkstra
+    /// Hitung path dari enemy ke target menggunakan algoritma Dijkstra
     /// Menggunakan GridBuilder sebagai state space/graph
     /// </summary>
-    void CalculatePathUsingDijkstra()
+    void CalculatePathToTarget(Vector3 targetPosition)
     {
         if (gridBuilder == null)
         {
@@ -260,34 +319,34 @@ public class GhostAI : MonoBehaviour
         // Ambil start node (posisi enemy saat ini)
         Node startNode = gridBuilder.GetNodeFromWorldPosition(transform.position);
         
-        // Ambil goal node (posisi player)
-        Node goalNode = gridBuilder.GetNodeFromWorldPosition(player.position);
+        // Ambil goal node (posisi target)
+        Node goalNode = gridBuilder.GetNodeFromWorldPosition(targetPosition);
 
         // Validasi node dengan debug info
         if (startNode == null)
         {
-            Debug.LogWarning($"[GhostAI] Start node NULL at position {transform.position}");
+            // Debug.LogWarning($"[GhostAI] Start node NULL at position {transform.position}");
             currentPath = null;
             return;
         }
 
         if (goalNode == null)
         {
-            Debug.LogWarning($"[GhostAI] Goal node NULL at player position {player.position}");
+            // Debug.LogWarning($"[GhostAI] Goal node NULL at target position {targetPosition}");
             currentPath = null;
             return;
         }
 
         if (!startNode.isWalkable)
         {
-            Debug.LogWarning("[GhostAI] Start node is not walkable!");
+            // Debug.LogWarning("[GhostAI] Start node is not walkable!");
             currentPath = null;
             return;
         }
 
         if (!goalNode.isWalkable)
         {
-            Debug.LogWarning("[GhostAI] Goal node is not walkable!");
+            // Debug.LogWarning("[GhostAI] Goal node is not walkable!");
             currentPath = null;
             return;
         }
@@ -298,11 +357,11 @@ public class GhostAI : MonoBehaviour
 
         if (currentPath != null && currentPath.Count > 0)
         {
-            Debug.Log($"[GhostAI] Path calculated: {currentPath.Count} nodes");
+            // Debug.Log($"[GhostAI] Path calculated: {currentPath.Count} nodes");
         }
         else
         {
-            Debug.LogWarning("[GhostAI] No path found!");
+            // Debug.LogWarning("[GhostAI] No path found!");
         }
     }
 
