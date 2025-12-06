@@ -60,7 +60,7 @@ public class GameManager : MonoBehaviour
         // Try find HUD in scene if not manually assigned
         if (hudController == null)
             hudController = FindObjectOfType<HUDController>();
-        
+
         // Auto-assign HealthIndicator
         if (healthIndicator == null)
         {
@@ -94,7 +94,7 @@ public class GameManager : MonoBehaviour
         {
             AudioManager.Instance.PlayMusic();
         }
-        
+
         // Update health indicator dengan playerLives awal
         UpdateHealthIndicator();
     }
@@ -103,13 +103,13 @@ public class GameManager : MonoBehaviour
     {
         GameObject[] ghosts = GameObject.FindGameObjectsWithTag("Ghost");
         Debug.Log("Found " + ghosts.Length + " ghosts in scene, need " + count);
-        
+
         // Jika ghost di scene kurang dari yang dibutuhkan, spawn ghost baru
         if (ghostPrefab != null && ghosts.Length < count)
         {
             int needed = count - ghosts.Length;
             Debug.Log("Spawning " + needed + " additional ghosts...");
-            
+
             // Spawn posisi default - sesuaikan dengan map Anda
             Vector3[] spawnPositions = new Vector3[]
             {
@@ -118,18 +118,18 @@ public class GameManager : MonoBehaviour
                 new Vector3(10, 1, -10),
                 new Vector3(-10, 1, -10)
             };
-            
+
             for (int i = 0; i < needed && i < spawnPositions.Length; i++)
             {
                 GameObject newGhost = Instantiate(ghostPrefab, spawnPositions[i], Quaternion.identity);
                 newGhost.tag = "Ghost";
                 newGhost.name = "Ghost_" + (ghosts.Length + i + 1);
             }
-            
+
             // Refresh ghost list setelah spawn
             ghosts = GameObject.FindGameObjectsWithTag("Ghost");
         }
-        
+
         // Activate/deactivate ghosts sesuai difficulty
         Debug.Log("Activating " + count + " ghosts out of " + ghosts.Length);
         for (int i = 0; i < ghosts.Length; i++)
@@ -177,7 +177,7 @@ public class GameManager : MonoBehaviour
         // Check if player actually died from health depletion
         PlayerHealth ph = player.GetComponent<PlayerHealth>();
         bool shouldLoseLife = true;
-        
+
         if (ph != null)
         {
             // Only lose life if health is depleted (<= 0)
@@ -194,13 +194,15 @@ public class GameManager : MonoBehaviour
             // Kurangi nyawa HANYA SEKALI di sini
             playerLives--;
             Debug.Log($"Player Respawning... Lives remaining: {playerLives}");
-            
+
             // Update health indicator setelah kehilangan life
             UpdateHealthIndicator();
         }
 
         if (playerLives <= 0 && shouldLoseLife)
         {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             SceneManager.LoadScene("Gameover");
             return;
         }
@@ -213,7 +215,9 @@ public class GameManager : MonoBehaviour
             cc.enabled = false;
             player.transform.position = lastCheckpointPos;
             cc.enabled = true;
-        }else{
+        }
+        else
+        {
             // FIX: Handle Rigidbody teleportation explicitly
             // Jika player menggunakan Rigidbody (seperti di MovementLogic), transform.position saja kadang gagal
             // terutama jika Rigidbody Interpolation aktif.
@@ -224,7 +228,7 @@ public class GameManager : MonoBehaviour
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
-            
+
             player.transform.position = lastCheckpointPos;
         }
 
@@ -239,12 +243,7 @@ public class GameManager : MonoBehaviour
 
     void TriggerNormalEnding()
     {
-        // Find CutsceneController and play normal ending if present
-        // CutsceneController cs = FindObjectOfType<CutsceneController>();
-        // if (cs != null)
-        //     cs.PlayNormalEnding();
-        // else
-        //     SceneManager.LoadScene("NormalEndingScene");
+        SceneManager.LoadScene("TrueEnding");
     }
 
     public void TriggerSecretEnding()
@@ -261,7 +260,7 @@ public class GameManager : MonoBehaviour
         if (hudController != null)
             hudController.UpdateHUD(collectedCount, playerLives, totalCollectibles);
     }
-    
+
     /// <summary>
     /// Update health indicator dengan playerLives
     /// </summary>
@@ -297,7 +296,7 @@ public class GameManager : MonoBehaviour
 
         // Load scene additive
         SceneManager.LoadScene(PauseSceneName, LoadSceneMode.Additive);
-        
+
         Time.timeScale = 0f;
         IsPaused = true;
 
@@ -317,13 +316,13 @@ public class GameManager : MonoBehaviour
         // Unload scene pause jika ada
         // Cek apakah scene pause benar-benar loaded sebelum unload untuk menghindari error
         SceneManager.UnloadSceneAsync(PauseSceneName);
-        
+
         Time.timeScale = 1f;
         IsPaused = false;
 
         // Kembalikan cursor ke state semula (misal terkunci untuk FPS/TPS)
         // Sesuaikan dengan kebutuhan game Anda, biasanya locked saat gameplay
-        Cursor.lockState = CursorLockMode.Locked; 
+        Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
         // Resume background music when game resumes
