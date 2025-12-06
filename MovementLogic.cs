@@ -43,6 +43,13 @@ public class MovementLogic : MonoBehaviour
     public bool TPSMode = true;
     public bool AimMode = false;
     public float HitPoints = 100f;
+
+    [Header("Combat Settings")]
+    public float attackRange = 50f;
+    public int attackDamage = 20;
+    public float attackCooldown = 0.5f;
+    public LayerMask enemyLayer;
+    private float lastAttackTime;
     
     // Private variables
     private float horizontalInput;
@@ -87,6 +94,13 @@ public class MovementLogic : MonoBehaviour
         }
         
         Debug.Log("[MovementLogic] Initialized - Walk Speed: " + walkSpeed + ", Run Speed: " + runSpeed);
+
+        // Safety check for attack cooldown to prevent instant kill
+        if (attackCooldown <= 0.05f) 
+        {
+            attackCooldown = 0.5f;
+            Debug.LogWarning("[MovementLogic] Attack Cooldown was too low (0), reset to 0.5f to prevent instant kill.");
+        }
     }
 
     void Update()
@@ -341,21 +355,63 @@ public class MovementLogic : MonoBehaviour
     }
     
     /// <summary>
-    /// Handle shooting animations
+    /// Handle shooting animations and logic
     /// </summary>
     void HandleShootLogic()
     {
         if (anim == null) return;
         
-        if (Input.GetKey(KeyCode.Mouse0))
+        // Handle Animation (Hold to keep attacking/pose)
+        if (Input.GetMouseButton(0))
         {
             bool isMoving = moveDirection.magnitude > 0.1f;
-            
             anim.SetBool("Attack", !isMoving);
         }
         else
         {
             anim.SetBool("Attack", false);
+        }
+
+        // Handle Damage (Click to hit once)
+        // Menggunakan GetMouseButtonDown agar damage hanya masuk sekali per klik
+        // Ini mencegah damage berulang kali saat tombol ditahan (spamming)
+        if (Input.GetMouseButtonDown(0))
+        {
+            bool isMoving = moveDirection.magnitude > 0.1f;
+
+            // Attack Logic
+            if (!isMoving && Time.time - lastAttackTime >= attackCooldown)
+            {
+                PerformAttack();
+                lastAttackTime = Time.time;
+            }
+        }
+    }
+
+    void PerformAttack()
+    {
+        RaycastHit hit;
+        Vector3 rayOrigin = cameraTransform.position;
+        Vector3 rayDirection = cameraTransform.forward;
+
+        // Use enemyLayer if set, otherwise hit everything
+        int layerMask = (enemyLayer.value != 0) ? enemyLayer.value : Physics.DefaultRaycastLayers;
+
+        if (Physics.Raycast(rayOrigin, rayDirection, out hit, attackRange, layerMask))
+        {
+            // Cek apakah yang kena adalah enemy (GhostHealth)
+            GhostHealth enemy = hit.collider.GetComponent<GhostHealth>();
+            Debug.Log("Raycast hit: " + hit.collider.name);
+            if (enemy == null)
+            {
+                enemy = hit.collider.GetComponentInParent<GhostHealth>();
+            }
+
+            if (enemy != null)
+            {
+                enemy.TakeDamage(attackDamage);
+                Debug.Log($"Player attacked {hit.collider.name}, dealt {attackDamage} damage.");
+            }
         }
     }
     

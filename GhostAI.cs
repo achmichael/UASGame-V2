@@ -14,7 +14,8 @@ public class GhostAI : MonoBehaviour
 
     [Header("AI Settings")]
     public float chaseRange = 12f;
-    public float attackRange = 1.5f; 
+    public float attackRange = 2.5f; // Increased to allow attack while stopped
+    public float stoppingDistance = 2.0f; // New: Distance to stop from player
     public float moveSpeed = 4f;
     public float attackCooldown = 1f; 
     public int attackDamage = 10;
@@ -93,7 +94,7 @@ public class GhostAI : MonoBehaviour
         agent.speed = moveSpeed;
         agent.angularSpeed = angularSpeed;
         agent.acceleration = acceleration;
-        agent.stoppingDistance = attackRange;
+        agent.stoppingDistance = stoppingDistance; // Use separate stopping distance
         agent.updateRotation = false; // Kita handle rotasi manual untuk kontrol lebih halus
         agent.baseOffset = baseOffset; // Sesuaikan tinggi enemy dari NavMesh
 
