@@ -114,6 +114,7 @@ public class LogicScene : MonoBehaviour
     {
         Debug.Log("LogicScene.TryAgain invoked");
         Time.timeScale = 1f;
+        // FIX: Load GameplayScene langsung agar difficulty tetap sama dan tidak perlu pilih ulang
         SceneManager.LoadScene(GameplayScene);
     }
 }

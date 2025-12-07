@@ -63,6 +63,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // Jika masuk ke GameplayScene, reset status game (lives, collectibles, dll)
+        if (scene.name == "GameplayScene")
+        {
+            InitializeGameplayState();
+        }
+
         // Delay sedikit untuk memastikan semua object sudah terinisialisasi
         StartCoroutine(RefreshUIReferencesDelayed());
     }
@@ -111,20 +117,8 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        int difficulty = PlayerPrefs.GetInt("Difficulty", 0); // default Easy
-        Debug.Log("Game Difficulty Level: " + difficulty);
-        switch (difficulty)
-        {
-            case 0: // Easy
-                playerLives = 5;
-                break;
-            case 1: // Normal
-                playerLives = 4;
-                break;
-            case 2: // Hard
-                playerLives = 3;
-                break;
-        }
+        // Initialize state awal
+        InitializeGameplayState();
 
         // Try find HUD in scene if not manually assigned
         if (hudController == null)
@@ -166,6 +160,34 @@ public class GameManager : MonoBehaviour
 
         // Update health indicator dengan playerLives awal
         UpdateHealthIndicator();
+    }
+
+    /// <summary>
+    /// Menginisialisasi ulang status game berdasarkan difficulty
+    /// Dipanggil saat Start atau saat reload GameplayScene
+    /// </summary>
+    public void InitializeGameplayState()
+    {
+        int difficulty = PlayerPrefs.GetInt("Difficulty", 0); // default Easy
+        Debug.Log("Initializing Gameplay State. Difficulty Level: " + difficulty);
+        
+        switch (difficulty)
+        {
+            case 0: // Easy
+                playerLives = 5;
+                break;
+            case 1: // Normal
+                playerLives = 4;
+                break;
+            case 2: // Hard
+                playerLives = 3;
+                break;
+        }
+        
+        // Reset collectibles saat restart level
+        collectedCount = 0;
+        
+        Debug.Log($"[GameManager] State initialized. Lives: {playerLives}, Collectibles: {collectedCount}");
     }
 
     void ActivateGhosts(int count)
