@@ -62,6 +62,9 @@ public class CheckpointZone : MonoBehaviour
             {
                 playerMovement.isSafe = true;
             }
+            
+            // BARU: Notifikasi semua enemy untuk mulai wander
+            NotifyAllEnemiesPlayerSafe(true);
         }
     }
 
@@ -78,6 +81,34 @@ public class CheckpointZone : MonoBehaviour
             {
                 playerMovement.isSafe = false;
             }
+            
+            // BARU: Notifikasi semua enemy bahwa player sudah tidak safe
+            NotifyAllEnemiesPlayerSafe(false);
         }
+    }
+    
+    /// <summary>
+    /// Notifikasi semua enemy tentang status safe player
+    /// </summary>
+    void NotifyAllEnemiesPlayerSafe(bool playerIsSafe)
+    {
+        GhostAI[] enemies = FindObjectsOfType<GhostAI>();
+        
+        foreach (GhostAI enemy in enemies)
+        {
+            if (enemy != null)
+            {
+                if (playerIsSafe)
+                {
+                    enemy.OnPlayerEnteredSafeZone();
+                }
+                else
+                {
+                    enemy.OnPlayerExitedSafeZone();
+                }
+            }
+        }
+        
+        Debug.Log($"[CheckpointZone] Notified {enemies.Length} enemies. Player safe: {playerIsSafe}");
     }
 }

@@ -50,6 +50,22 @@ public class GhostAI : MonoBehaviour
     [Tooltip("Jarak threshold untuk dianggap sudah sampai node (meter)")]
     public float nodeReachThreshold = 0.5f;
 
+    [Header("Wandering Settings")]
+    [Tooltip("Kecepatan berjalan saat wandering (lebih lambat dari chase)")]
+    public float wanderSpeed = 2f;
+    
+    [Tooltip("Waktu menunggu di lokasi sebelum mencari target baru (detik) - dikurangi agar tidak diam terlalu lama")]
+    public float wanderWaitTime = 0.5f; // Dikurangi dari 2f ke 0.5f
+    
+    [Tooltip("Jarak minimum dari posisi sekarang untuk memilih wander target")]
+    public float minWanderDistance = 3f; // Dikurangi dari 5f ke 3f agar lebih mudah menemukan target
+    
+    [Tooltip("Jarak maksimum untuk wander target")]
+    public float maxWanderDistance = 15f;
+    
+    [Tooltip("Waktu maksimal stuck di satu posisi sebelum pindah target (detik)")]
+    public float maxStuckTime = 3f;
+
     [Header("States")]
     public bool isChasing = false;
     public bool isAttacking = false;
@@ -60,6 +76,14 @@ public class GhostAI : MonoBehaviour
     private float lastPathUpdateTime;
     private Vector3 wanderTarget;
     private bool hasWanderTarget = false;
+    private float wanderArrivalTime;
+    private bool isWaitingAtWanderTarget = false;
+    
+    // BARU: Tracking untuk mencegah stuck
+    private Vector3 lastPosition;
+    private float lastMoveTime;
+    private float stuckCheckInterval = 1f;
+    private float lastStuckCheckTime;
     
     // Pathfinding
     private List<Node> currentPath;
@@ -83,15 +107,18 @@ public class GhostAI : MonoBehaviour
         {
             case 0: // Easy
                 moveSpeed = 3f; 
-                chaseRange = 8f; 
+                chaseRange = 8f;
+                wanderSpeed = 1.5f;
                 break;
             case 1: // Normal
                 moveSpeed = 4f; 
-                chaseRange = 12f; 
+                chaseRange = 12f;
+                wanderSpeed = 2f;
                 break;
             case 2: // Hard
                 moveSpeed = 5f; 
-                chaseRange = 15f; 
+                chaseRange = 15f;
+                wanderSpeed = 2.5f;
                 break;
         }
 
@@ -127,12 +154,39 @@ public class GhostAI : MonoBehaviour
             Debug.LogError("GridBuilder tidak ditemukan! Pastikan ada GameObject dengan GridBuilder script di scene.");
             
         if (obstacleMask == 0) 
-            obstacleMask = -1; 
+            obstacleMask = -1;
+            
+        // Mulai dengan wander state
+        isWandering = true;
+        lastPosition = transform.position;
+        lastMoveTime = Time.time;
+        lastStuckCheckTime = Time.time;
+        
+        // Delay sedikit sebelum mulai wander untuk memastikan grid sudah ready
+        StartCoroutine(DelayedFirstWander());
+    }
+    
+    IEnumerator DelayedFirstWander()
+    {
+        yield return new WaitForSeconds(0.5f);
+        
+        if (gridBuilder != null && gridBuilder.grid != null)
+        {
+            PickRandomWanderTarget();
+            Debug.Log($"[GhostAI] {gameObject.name} memulai wandering");
+        }
+        else
+        {
+            Debug.LogWarning($"[GhostAI] {gameObject.name} - GridBuilder belum ready, mencoba lagi...");
+            yield return new WaitForSeconds(1f);
+            PickRandomWanderTarget();
+        }
     }
 
     void Update()
     {
-        if (player == null || agent == null || gridBuilder == null) return;
+        // FIX: Jangan return jika gridBuilder null, karena kita punya fallback NavMesh
+        if (player == null || agent == null) return;
 
         if (playerHealth != null && playerHealth.IsDead)
         {
@@ -153,6 +207,7 @@ public class GhostAI : MonoBehaviour
             isAttacking = true;
             isChasing = false;
             isWandering = false;
+            isWaitingAtWanderTarget = false;
             
             PerformAttackBehavior();
         }
@@ -162,9 +217,13 @@ public class GhostAI : MonoBehaviour
             isAttacking = false;
             isChasing = true;
             isWandering = false;
+            isWaitingAtWanderTarget = false;
 
-            // FIX: Reset damage flag ketika keluar dari attack state
+            // Reset damage flag ketika keluar dari attack state
             hasDealtDamageThisAttack = false;
+            
+            // Set kecepatan normal untuk chase
+            agent.speed = moveSpeed;
 
             PerformChaseBehavior();
         }
@@ -175,12 +234,16 @@ public class GhostAI : MonoBehaviour
             isChasing = false;
             isWandering = true;
 
-            // FIX: Reset damage flag ketika keluar dari attack state
+            // Reset damage flag ketika keluar dari attack state
             hasDealtDamageThisAttack = false;
+            
+            // Set kecepatan lebih lambat untuk wander
+            agent.speed = wanderSpeed;
             
             PerformWanderBehavior();
         }
 
+        // Rotasi hanya saat tidak wandering
         if (!isWandering)
         {
             HandleRotation();
@@ -193,49 +256,289 @@ public class GhostAI : MonoBehaviour
 
     void PerformWanderBehavior()
     {
-        if (!hasWanderTarget || Vector3.Distance(transform.position, wanderTarget) < nodeReachThreshold)
+        // CEK STUCK: Apakah enemy stuck di satu tempat terlalu lama?
+        CheckIfStuck();
+        
+        // PENTING: Pastikan agent tidak stopped
+        if (agent.isStopped)
         {
-            PickRandomWanderTarget();
+            agent.isStopped = false;
+        }
+        
+        // Jika sedang menunggu di target, cek apakah sudah waktunya bergerak lagi
+        if (isWaitingAtWanderTarget)
+        {
+            if (Time.time - wanderArrivalTime >= wanderWaitTime)
+            {
+                isWaitingAtWanderTarget = false;
+                hasWanderTarget = false;
+                // Langsung pilih target baru tanpa delay
+                PickRandomWanderTarget();
+            }
+            else
+            {
+                // Menunggu sebentar
+                SetAnimationState(false, false, false);
+                return;
+            }
         }
 
+        // Cek apakah sudah sampai target (gunakan pathPending untuk akurasi)
+        // Kita gunakan remainingDistance dari NavMeshAgent langsung
+        bool reachedDestination = !agent.pathPending && 
+                                  (agent.remainingDistance <= agent.stoppingDistance + 0.5f);
+
+        if (!hasWanderTarget || reachedDestination)
+        {
+            if (hasWanderTarget) // Berarti baru sampai
+            {
+                isWaitingAtWanderTarget = true;
+                wanderArrivalTime = Time.time;
+                return;
+            }
+            else // Tidak punya target, pilih baru
+            {
+                PickRandomWanderTarget();
+            }
+        }
+
+        // Bergerak ke target wander
         if (hasWanderTarget)
         {
-             if (Time.time - lastPathUpdateTime > pathUpdateInterval)
-             {
-                 CalculatePathToTarget(wanderTarget);
-                 lastPathUpdateTime = Time.time;
-             }
-             FollowCalculatedPath();
-             
-             bool isMoving = agent.velocity.sqrMagnitude > 0.1f;
-             SetAnimationState(false, isMoving, false);
+            // SIMPLIFIKASI: Langsung gunakan NavMeshAgent, abaikan custom pathfinding untuk wander
+            // Ini jauh lebih reliable untuk random movement
+            if (Vector3.Distance(agent.destination, wanderTarget) > 1.0f)
+            {
+                agent.SetDestination(wanderTarget);
+            }
+            
+            // Cek apakah agent sedang bergerak
+            bool isMoving = agent.velocity.sqrMagnitude > 0.1f;
+            
+            // Set animasi walk (bukan run) saat wandering
+            SetAnimationState(isMoving, false, false);
+            
+            // Rotasi smooth ke arah tujuan saat wandering
+            if (isMoving)
+            {
+                Vector3 direction = agent.velocity.normalized;
+                direction.y = 0;
+                
+                if (direction.sqrMagnitude > 0.001f)
+                {
+                    Quaternion lookRotation = Quaternion.LookRotation(direction);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, 5f * Time.deltaTime);
+                }
+                
+                // Update posisi terakhir bergerak
+                lastPosition = transform.position;
+                lastMoveTime = Time.time;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Fallback method: gunakan NavMesh langsung untuk mencari random point
+    /// </summary>
+    void TryDirectNavMeshWander()
+    {
+        // Cari random point di sekitar enemy menggunakan NavMesh
+        Vector3 randomDirection = Random.insideUnitSphere * maxWanderDistance;
+        randomDirection += transform.position;
+        
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(randomDirection, out hit, maxWanderDistance, NavMesh.AllAreas))
+        {
+            wanderTarget = hit.position;
+            hasWanderTarget = true;
+            agent.SetDestination(wanderTarget);
+            Debug.Log($"[GhostAI] Using NavMesh direct wander to {wanderTarget}");
+        }
+    }
+    
+    /// <summary>
+    /// Cek apakah enemy stuck dan paksa pilih target baru jika iya
+    /// </summary>
+    void CheckIfStuck()
+    {
+        // Cek setiap interval tertentu
+        if (Time.time - lastStuckCheckTime < stuckCheckInterval)
+            return;
+            
+        lastStuckCheckTime = Time.time;
+        
+        // Hitung jarak dari posisi terakhir
+        float movedDistance = Vector3.Distance(transform.position, lastPosition);
+        
+        // Jika tidak bergerak signifikan dalam waktu lama
+        if (movedDistance < 0.3f && Time.time - lastMoveTime > maxStuckTime)
+        {
+            Debug.Log($"[GhostAI] {gameObject.name} stuck! Mencari target wander baru...");
+            
+            // Reset state dan pilih target baru
+            hasWanderTarget = false;
+            isWaitingAtWanderTarget = false;
+            currentPath = null;
+            agent.ResetPath();
+            
+            // Coba NavMesh direct wander dulu (lebih reliable)
+            TryDirectNavMeshWander();
+            
+            // Jika masih gagal, coba grid-based
+            if (!hasWanderTarget)
+            {
+                PickRandomWanderTarget();
+            }
+            
+            // Reset tracking
+            lastPosition = transform.position;
+            lastMoveTime = Time.time;
+        }
+        
+        // Update last position untuk tracking berikutnya
+        if (movedDistance > 0.3f)
+        {
+            lastPosition = transform.position;
         }
     }
 
     void PickRandomWanderTarget()
     {
+        // Metode 1: Gunakan validCells dari GridBuilder (lebih reliable)
+        if (gridBuilder != null && gridBuilder.validCells != null && gridBuilder.validCells.Count > 0)
+        {
+            List<Vector3> validPositions = new List<Vector3>();
+            List<Vector3> nearbyPositions = new List<Vector3>();
+            
+            foreach (Vector3 cellPos in gridBuilder.validCells)
+            {
+                float distanceToCell = Vector3.Distance(transform.position, cellPos);
+                
+                if (distanceToCell >= minWanderDistance && distanceToCell <= maxWanderDistance)
+                {
+                    validPositions.Add(cellPos);
+                }
+                else if (distanceToCell >= 1f && distanceToCell < minWanderDistance)
+                {
+                    nearbyPositions.Add(cellPos);
+                }
+            }
+            
+            // Prioritas: posisi dengan jarak ideal
+            if (validPositions.Count > 0)
+            {
+                Vector3 selectedPos = validPositions[Random.Range(0, validPositions.Count)];
+                SetWanderTarget(selectedPos);
+                Debug.Log($"[GhostAI] {gameObject.name} picked wander target from validCells");
+                return;
+            }
+            
+            // Fallback: posisi lebih dekat
+            if (nearbyPositions.Count > 0)
+            {
+                Vector3 selectedPos = nearbyPositions[Random.Range(0, nearbyPositions.Count)];
+                SetWanderTarget(selectedPos);
+                Debug.Log($"[GhostAI] {gameObject.name} using nearby position as fallback");
+                return;
+            }
+            
+            // Last resort dari validCells: random cell
+            if (gridBuilder.validCells.Count > 0)
+            {
+                Vector3 randomCell = gridBuilder.validCells[Random.Range(0, gridBuilder.validCells.Count)];
+                SetWanderTarget(randomCell);
+                Debug.Log($"[GhostAI] {gameObject.name} using random validCell as last resort");
+                return;
+            }
+        }
+        
+        // Metode 2: Gunakan grid jika validCells tidak tersedia
         if (gridBuilder != null && gridBuilder.grid != null)
         {
-             for(int i=0; i<10; i++)
-             {
-                 int x = Random.Range(0, gridBuilder.gridWidth);
-                 int z = Random.Range(0, gridBuilder.gridHeight);
-                 Node node = gridBuilder.grid[x,z];
-                 if (node != null && node.isWalkable)
-                 {
-                     wanderTarget = node.position;
-                     hasWanderTarget = true;
-                     return;
-                 }
-             }
+            List<Node> validNodes = new List<Node>();
+            
+            for (int x = 0; x < gridBuilder.gridWidth; x++)
+            {
+                for (int z = 0; z < gridBuilder.gridHeight; z++)
+                {
+                    Node node = gridBuilder.grid[x, z];
+                    if (node != null && node.isWalkable)
+                    {
+                        float distanceToNode = Vector3.Distance(transform.position, node.position);
+                        if (distanceToNode >= minWanderDistance && distanceToNode <= maxWanderDistance)
+                        {
+                            validNodes.Add(node);
+                        }
+                    }
+                }
+            }
+            
+            if (validNodes.Count > 0)
+            {
+                Node selectedNode = validNodes[Random.Range(0, validNodes.Count)];
+                SetWanderTarget(selectedNode.position);
+                Debug.Log($"[GhostAI] {gameObject.name} picked wander target from grid");
+                return;
+            }
         }
+        
+        // Metode 3: NavMesh fallback (selalu berhasil jika ada NavMesh)
+        Debug.LogWarning($"[GhostAI] {gameObject.name} - Grid tidak tersedia, menggunakan NavMesh fallback");
+        TryDirectNavMeshWander();
+    }
+    
+    /// <summary>
+    /// Set wander target dan reset path
+    /// </summary>
+    void SetWanderTarget(Vector3 targetPosition)
+    {
+        wanderTarget = targetPosition;
+        hasWanderTarget = true;
+        currentPath = null; // Reset path agar dihitung ulang
+        agent.isStopped = false;
+        
+        float distanceToTarget = Vector3.Distance(transform.position, wanderTarget);
+        Debug.Log($"[GhostAI] Enemy memilih wander target baru di {wanderTarget}, jarak: {distanceToTarget:F2}m");
+    }
+    
+    /// <summary>
+    /// Dipanggil saat player masuk checkpoint (safe zone) - enemy langsung wander
+    /// </summary>
+    public void OnPlayerEnteredSafeZone()
+    {
+        if (isChasing || isAttacking)
+        {
+            Debug.Log($"[GhostAI] Player masuk safe zone! Enemy berhenti mengejar dan mulai wander.");
+            
+            // Force switch ke wander state
+            isChasing = false;
+            isAttacking = false;
+            isWandering = true;
+            
+            // Reset path dan pilih target wander baru
+            currentPath = null;
+            hasWanderTarget = false;
+            agent.ResetPath();
+            agent.speed = wanderSpeed;
+            
+            PickRandomWanderTarget();
+        }
+    }
+    
+    /// <summary>
+    /// Dipanggil saat player keluar checkpoint - enemy bisa mengejar lagi jika dalam range
+    /// </summary>
+    public void OnPlayerExitedSafeZone()
+    {
+        Debug.Log($"[GhostAI] Player keluar safe zone! Enemy siap mengejar jika dalam range.");
+        // State akan otomatis berubah di Update() berdasarkan jarak
     }
 
     void PerformAttackBehavior()
     {
         agent.isStopped = true;
         
-        // FIX: Hanya trigger animasi dan cek cooldown, damage akan diberikan via Animation Event
+        // Hanya trigger animasi dan cek cooldown, damage akan diberikan via Animation Event
         if (Time.time - lastAttackTime > attackCooldown)
         {
             // Trigger attack animation
@@ -256,8 +559,7 @@ public class GhostAI : MonoBehaviour
         }
     }
 
-    // FIX: Method baru yang akan dipanggil dari Animation Event
-    // Tambahkan Animation Event pada frame tengah animasi attack Anda
+    // Method yang akan dipanggil dari Animation Event
     public void DealDamageToPlayer()
     {
         // Cek apakah sudah pernah deal damage dalam attack ini
@@ -266,15 +568,15 @@ public class GhostAI : MonoBehaviour
             Debug.Log("Damage sudah diberikan untuk attack ini, skip.");
             return;
         }
+        
         Debug.Log("Ghost mencoba memberikan damage ke player...");
-        // Double check apakah player masih dalam range dan kondisi valid
+        
         if (player == null) return;
 
         Debug.Log("Memeriksa jarak ke player untuk memberikan damage...");
         
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
         
-        Debug.Log($"Value of animator {animator}");
         if (distanceToPlayer <= attackRange && CanAttackPlayer())
         {
             if (playerHealth != null)
@@ -424,14 +726,31 @@ public class GhostAI : MonoBehaviour
         if (currentPath == null || currentPath.Count == 0)
         {
             agent.isStopped = false;
-            agent.SetDestination(player.position);
+            
+            // Untuk wander, gunakan wander target; untuk chase, gunakan player position
+            if (isWandering && hasWanderTarget)
+            {
+                agent.SetDestination(wanderTarget);
+            }
+            else if (isChasing && player != null)
+            {
+                agent.SetDestination(player.position);
+            }
             return;
         }
 
         if (currentPathIndex >= currentPath.Count)
         {
             agent.isStopped = false;
-            agent.SetDestination(player.position);
+            
+            if (isWandering && hasWanderTarget)
+            {
+                agent.SetDestination(wanderTarget);
+            }
+            else if (isChasing && player != null)
+            {
+                agent.SetDestination(player.position);
+            }
             return;
         }
 
@@ -527,6 +846,14 @@ public class GhostAI : MonoBehaviour
         Gizmos.color = Color.blue;
         Gizmos.DrawRay(transform.position, leftRay * attackRange);
         Gizmos.DrawRay(transform.position, rightRay * attackRange);
+
+        // Visualisasi wander target
+        if (hasWanderTarget)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(wanderTarget, 0.5f);
+            Gizmos.DrawLine(transform.position, wanderTarget);
+        }
 
         if (currentPath != null && currentPath.Count > 0)
         {
