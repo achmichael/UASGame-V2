@@ -12,6 +12,13 @@ public class CheckpointZone : MonoBehaviour
     public Light checkpointLight;
     public AudioClip activateSound;
     private bool isActivated = false;
+    private Color originalLightColor;
+
+    private void Start()
+    {
+        if (checkpointLight != null)
+            originalLightColor = checkpointLight.color;
+    }
 
     private void Reset()
     {
@@ -21,49 +28,43 @@ public class CheckpointZone : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        // =============================
-        // BAGIAN UTAMA (KODE ORIGINAL TIM)
-        // =============================
-        if (other.CompareTag("Player") && !isActivated)
+        if (other.CompareTag("Player"))
         {
-            isActivated = true;
-
-            // Simpan checkpoint aktif di GameManager
-            if (GameManager.Instance != null)
-                GameManager.Instance.SetCheckpoint(transform.position);
-            else
-                Debug.LogWarning("GameManager.Instance is null. Pastikan GameManager ada di scene.");
-
-            // Aktifkan efek cahaya
+            // Visual: Set warna hijau saat player di dalam
             if (checkpointLight != null)
                 checkpointLight.color = Color.green;
 
-            // Suara aktivasi
-            if (activateSound != null)
+            // Logic Aktivasi Checkpoint (Hanya sekali)
+            if (!isActivated)
             {
-                if (AudioManager.Instance != null)
-                    AudioManager.Instance.PlaySFX(activateSound, transform.position);
+                isActivated = true;
+
+                // Simpan checkpoint aktif di GameManager
+                if (GameManager.Instance != null)
+                    GameManager.Instance.SetCheckpoint(transform.position);
                 else
-                    AudioSource.PlayClipAtPoint(activateSound, transform.position);
+                    Debug.LogWarning("GameManager.Instance is null. Pastikan GameManager ada di scene.");
+
+                // Suara aktivasi
+                if (activateSound != null)
+                {
+                    if (AudioManager.Instance != null)
+                        AudioManager.Instance.PlaySFX(activateSound, transform.position);
+                    else
+                        AudioSource.PlayClipAtPoint(activateSound, transform.position);
+                }
+
+                Debug.Log($"Checkpoint {checkpointID} diaktifkan!");
             }
 
-            Debug.Log($"Checkpoint {checkpointID} diaktifkan!");
-        }
-
-        // =============================================================
-        // ✨ FITUR TAMBAHAN (UPDATE): Hentikan musuh mengejar player
-        // -------------------------------------------------------------
-        if (other.CompareTag("Player"))
-        {
-            // Set status safe pada player
-            // GhostAI akan membaca status ini dan berhenti mengejar
+            // Logic Safe Zone
             MovementLogic playerMovement = other.GetComponent<MovementLogic>();
             if (playerMovement != null)
             {
                 playerMovement.isSafe = true;
             }
             
-            // BARU: Notifikasi semua enemy untuk mulai wander
+            // Notifikasi semua enemy untuk mulai wander
             NotifyAllEnemiesPlayerSafe(true);
         }
     }
@@ -75,6 +76,10 @@ public class CheckpointZone : MonoBehaviour
         // -------------------------------------------------------------
         if (other.CompareTag("Player"))
         {
+            // Revert warna lampu ke warna asli
+            if (checkpointLight != null)
+                checkpointLight.color = originalLightColor;
+
             // Set status safe pada player
             MovementLogic playerMovement = other.GetComponent<MovementLogic>();
             if (playerMovement != null)
