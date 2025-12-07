@@ -11,10 +11,12 @@ public class GhostHealth : MonoBehaviour
     [Header("Death Settings")]
     public float destroyDelay = 2f;
     public GameObject deathEffect; // Optional: Particle effect saat mati
+    public AudioClip deathSound; // Suara saat mati
 
     private Animator anim;
     private GhostAI ghostAI;
     private Collider ghostCollider;
+    private AudioSource audioSource;
     private bool isDead = false;
 
     void Start()
@@ -23,6 +25,7 @@ public class GhostHealth : MonoBehaviour
         anim = GetComponent<Animator>();
         ghostAI = GetComponent<GhostAI>();
         ghostCollider = GetComponent<Collider>();
+        audioSource = GetComponent<AudioSource>();
     }
 
     public void TakeDamage(int damage)
@@ -76,6 +79,19 @@ public class GhostHealth : MonoBehaviour
         if (deathEffect != null)
         {
             Instantiate(deathEffect, transform.position, Quaternion.identity);
+        }
+
+        // Play death sound
+        if (deathSound != null)
+        {
+            if (audioSource != null)
+            {
+                audioSource.PlayOneShot(deathSound);
+            }
+            else
+            {
+                AudioSource.PlayClipAtPoint(deathSound, transform.position);
+            }
         }
 
         // Destroy object after delay
