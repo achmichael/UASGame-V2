@@ -66,6 +66,15 @@ public class GhostAI : MonoBehaviour
     [Tooltip("Waktu maksimal stuck di satu posisi sebelum pindah target (detik)")]
     public float maxStuckTime = 3f;
 
+    [Header("Audio Settings")]
+    public AudioClip ghostChaseClip;
+    [Range(0f, 1f)] public float chaseVolume = 0.6f;
+    private AudioSource ghostAudioSource;
+    
+    // Global tracking untuk heartbeat player
+    private static int chasingCount = 0;
+    private bool wasChasing = false;
+
     [Header("States")]
     public bool isChasing = false;
     public bool isAttacking = false;
@@ -94,6 +103,18 @@ public class GhostAI : MonoBehaviour
 
     void Start()
     {
+        // Setup Audio
+        ghostAudioSource = GetComponent<AudioSource>();
+        if (ghostAudioSource == null)
+        {
+            ghostAudioSource = gameObject.AddComponent<AudioSource>();
+        }
+        ghostAudioSource.loop = true;
+        ghostAudioSource.spatialBlend = 1.0f; // 3D Sound
+        ghostAudioSource.minDistance = 2f;
+        ghostAudioSource.maxDistance = chaseRange + 5f;
+        ghostAudioSource.rolloffMode = AudioRolloffMode.Linear;
+
         agent = GetComponent<NavMeshAgent>();
         if (agent == null) 
         {
@@ -247,6 +268,74 @@ public class GhostAI : MonoBehaviour
         if (!isWandering)
         {
             HandleRotation();
+        }
+        
+        // Update Audio State
+        UpdateChaseAudio();
+    }
+    
+    void OnDisable()
+    {
+        if (wasChasing)
+        {
+            chasingCount--;
+            if (chasingCount <= 0)
+            {
+                chasingCount = 0;
+                if (AudioManager.Instance != null)
+                    AudioManager.Instance.StopHeartbeat();
+            }
+            wasChasing = false;
+        }
+    }
+    
+    void UpdateChaseAudio()
+    {
+        // Jika state berubah
+        if (isChasing != wasChasing)
+        {
+            if (isChasing)
+            {
+                // Start Chasing
+                chasingCount++;
+                
+                // Play Ghost Sound
+                if (ghostAudioSource != null && ghostChaseClip != null)
+                {
+                    ghostAudioSource.clip = ghostChaseClip;
+                    ghostAudioSource.volume = chaseVolume;
+                    ghostAudioSource.Play();
+                }
+                
+                // Trigger Player Heartbeat (jika ini ghost pertama yang chase)
+                if (chasingCount == 1 && AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayHeartbeat();
+                }
+            }
+            else
+            {
+                // Stop Chasing
+                chasingCount--;
+                
+                // Stop Ghost Sound
+                if (ghostAudioSource != null)
+                {
+                    ghostAudioSource.Stop();
+                }
+                
+                // Stop Player Heartbeat (jika tidak ada lagi ghost yang chase)
+                if (chasingCount <= 0)
+                {
+                    chasingCount = 0; // Safety clamp
+                    if (AudioManager.Instance != null)
+                    {
+                        AudioManager.Instance.StopHeartbeat();
+                    }
+                }
+            }
+            
+            wasChasing = isChasing;
         }
     }
 

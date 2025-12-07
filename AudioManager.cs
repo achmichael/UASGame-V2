@@ -16,6 +16,10 @@ public class AudioManager : MonoBehaviour
     [Range(0f, 1f)] public float sfxVolume = 1.0f;
     public bool sfxMuted = false;
 
+    [Header("Player FX")]
+    public AudioClip heartbeatClip;
+    private AudioSource heartbeatSource;
+
     AudioSource audioSource;
 
     void Awake()
@@ -32,6 +36,11 @@ public class AudioManager : MonoBehaviour
         audioSource = GetComponent<AudioSource>();
         audioSource.loop = true;
         audioSource.playOnAwake = false;
+        
+        // Setup Heartbeat Source
+        heartbeatSource = gameObject.AddComponent<AudioSource>();
+        heartbeatSource.loop = true;
+        heartbeatSource.playOnAwake = false;
         
         // Load saved settings immediately
         LoadSettings();
@@ -99,6 +108,28 @@ public class AudioManager : MonoBehaviour
     {
         musicMuted = muted;
         UpdateMusicVolume();
+    }
+
+    public void PlayHeartbeat()
+    {
+        if (heartbeatSource == null || heartbeatClip == null) return;
+        
+        if (!heartbeatSource.isPlaying)
+        {
+            heartbeatSource.clip = heartbeatClip;
+            heartbeatSource.volume = sfxVolume; // Use SFX volume for heartbeat
+            heartbeatSource.Play();
+        }
+    }
+
+    public void StopHeartbeat()
+    {
+        if (heartbeatSource == null) return;
+        
+        if (heartbeatSource.isPlaying)
+        {
+            heartbeatSource.Stop();
+        }
     }
 
     private void UpdateMusicVolume()
