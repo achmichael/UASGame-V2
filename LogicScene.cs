@@ -14,6 +14,7 @@ public class LogicScene : MonoBehaviour
     private bool isPaused = false;
     private bool isPauseSceneLoaded = false;
     private const string SettingScene = "Pause-Setting";
+    private const string TutorialScene = "Tutorial";
 
     void Start()
     {
@@ -34,7 +35,7 @@ public class LogicScene : MonoBehaviour
             }
         }
 
-         if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButtonDown(0))
         {
             PointerEventData eventData = new PointerEventData(EventSystem.current);
             eventData.position = Input.mousePosition;
@@ -61,16 +62,16 @@ public class LogicScene : MonoBehaviour
 
     public void OpenSettingMainMenu()
     {
-        SceneManager.LoadScene(SettingMenu);
+        SceneManager.LoadScene(SettingScene);
     }
 
     public void QuitGame()
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
-        #else
-            Application.Quit();
-        #endif
+#else
+        Application.Quit();
+#endif
     }
 
     public void GoToMainMenu()
@@ -106,8 +107,20 @@ public class LogicScene : MonoBehaviour
 
     public void BackToPause()
     {
-        SceneManager.UnloadSceneAsync(SettingScene);
-        SceneManager.LoadScene(PauseScene, LoadSceneMode.Additive);
+        // Check if GameplayScene is loaded to determine where to go back
+        Scene gameplay = SceneManager.GetSceneByName(GameplayScene);
+
+        if (gameplay.IsValid() && gameplay.isLoaded)
+        {
+            // If in Gameplay, go back to Pause overlay
+            SceneManager.UnloadSceneAsync(SettingScene);
+            SceneManager.LoadScene(PauseScene, LoadSceneMode.Additive);
+        }
+        else
+        {
+            // If not in Gameplay (e.g. from Main Menu), go back to Main Menu
+            SceneManager.LoadScene(mainmenu);
+        }
     }
 
     public void TryAgain()
@@ -117,4 +130,12 @@ public class LogicScene : MonoBehaviour
         // FIX: Load GameplayScene langsung agar difficulty tetap sama dan tidak perlu pilih ulang
         SceneManager.LoadScene(GameplayScene);
     }
+
+    public void Tutorial()
+    {
+        SceneManager.LoadScene(TutorialScene);
+    }
 }
+
+
+

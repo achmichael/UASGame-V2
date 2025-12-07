@@ -30,6 +30,14 @@ public class AudioSettingsUI : MonoBehaviour
 
     void Start()
     {
+        // Ensure EventSystem exists
+        if (UnityEngine.EventSystems.EventSystem.current == null)
+        {
+            GameObject eventSystem = new GameObject("EventSystem");
+            eventSystem.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            eventSystem.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        }
+
         LoadSettings();
 
         // Setup Listeners

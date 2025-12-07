@@ -57,6 +57,10 @@ public class MovementLogic : MonoBehaviour
     public AudioClip footstepClip;
     [Range(0f, 1f)] public float footstepVolume = 0.5f;
     
+    [Header("Attack Audio Settings")]
+    public AudioClip attackClip;
+    [Range(0f, 1f)] public float attackVolume = 0.8f;
+
     // Private variables
     private float horizontalInput;
     private float verticalInput;
@@ -397,6 +401,9 @@ public class MovementLogic : MonoBehaviour
 
     void PerformAttack()
     {
+        // Mainkan suara serangan
+        PlayAttackSound();
+
         RaycastHit hit;
         Vector3 rayOrigin = cameraTransform.position;
         Vector3 rayDirection = cameraTransform.forward;
@@ -437,35 +444,34 @@ public class MovementLogic : MonoBehaviour
     }
 
     public void ResetForRespawn()
-{
-    // Reset input & arah gerak
-    horizontalInput = 0f;
-    verticalInput = 0f;
-    moveDirection = Vector3.zero;
-    jumpDirection = Vector3.zero;
-
-    // Reset fisika
-    if (rb != null)
     {
-        rb.velocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
+        // Reset input & arah gerak
+        horizontalInput = 0f;
+        verticalInput = 0f;
+        moveDirection = Vector3.zero;
+        jumpDirection = Vector3.zero;
+
+        // Reset fisika
+        if (rb != null)
+        {
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        // Reset state ground/stair
+        grounded = true;
+        isOnStair = false;
+        aerialBoost = true;
+
+        // Reset animator bool yang dipakai MovementLogic
+        if (anim != null)
+        {
+            anim.SetBool("Walk", false);
+            anim.SetBool("Run", false);
+            anim.SetBool("Jump", false);
+            anim.SetBool("Attack", false);
+        }
     }
-
-    // Reset state ground/stair
-    grounded = true;
-    isOnStair = false;
-    aerialBoost = true;
-
-    // Reset animator bool yang dipakai MovementLogic
-    if (anim != null)
-    {
-        anim.SetBool("Walk", false);
-        anim.SetBool("Run", false);
-        anim.SetBool("Jump", false);
-        anim.SetBool("Attack", false);
-    }
-}
-
     
     /// <summary>
     /// Handle player damage
@@ -514,7 +520,18 @@ public class MovementLogic : MonoBehaviour
     {
         if (footstepAudioSource != null && footstepClip != null)
         {            
-                footstepAudioSource.PlayOneShot(footstepClip, footstepVolume);
+            footstepAudioSource.PlayOneShot(footstepClip, footstepVolume);
+        }
+    }
+
+    /// <summary>
+    /// Mainkan suara serangan saat player menyerang
+    /// </summary>
+    public void PlayAttackSound()
+    {
+        if (footstepAudioSource != null && attackClip != null)
+        {
+            footstepAudioSource.PlayOneShot(attackClip, attackVolume);
         }
     }
 

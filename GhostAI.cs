@@ -23,6 +23,7 @@ public class GhostAI : MonoBehaviour
 
     [Tooltip("Sudut maksimal (0-180) agar enemy dianggap menghadap player.")]
     public float frontAngleThreshold = 60f;
+    public bool isDead = false;
 
     [Tooltip("Beda ketinggian maksimal yang diperbolehkan untuk menyerang.")]
     public float maxVerticalOffset = 1.0f;
@@ -102,6 +103,9 @@ public class GhostAI : MonoBehaviour
 
     // FIX: Flag untuk mencegah multiple damage dalam satu attack animation
     private bool hasDealtDamageThisAttack = false;
+
+    // BARU: Flag untuk memastikan animasi mati hanya dipicu sekali
+    private bool hasPlayedDeathAnim = false;
 
     void Start()
     {
@@ -189,6 +193,28 @@ public class GhostAI : MonoBehaviour
         StartCoroutine(DelayedFirstWander());
     }
 
+    public void OnDeath()
+    {
+        isDead = true;
+        isChasing = false;
+        isAttacking = false;
+        isWandering = false;
+
+        if (agent != null) agent.isStopped = true;
+
+        // Matikan semua state animasi jalan/lari/serang
+        SetAnimationState(false, false, false);
+
+        // Trigger animasi mati
+        if (animator != null)
+        {
+            animator.SetTrigger("Die");
+        }
+
+        // Matikan suara
+        if (ghostAudioSource != null) ghostAudioSource.Stop();
+    }
+
     IEnumerator DelayedFirstWander()
     {
         yield return new WaitForSeconds(0.5f);
@@ -208,6 +234,24 @@ public class GhostAI : MonoBehaviour
 
     void Update()
     {
+        // BARU: Stop semua logic AI kalau sudah mati
+        if (isDead)
+        {
+            if (agent != null)
+                agent.isStopped = true;
+
+            if (animator != null && !hasPlayedDeathAnim)
+            {
+                // Pastikan tidak ada animasi jalan/lari/serang yang aktif
+                SetAnimationState(false, false, false);
+                animator.SetTrigger("Die");
+                hasPlayedDeathAnim = true;
+            }
+
+            // Jangan lanjutkan state machine
+            return;
+        }
+
         // FIX: Jangan return jika gridBuilder null, karena kita punya fallback NavMesh
         if (player == null || agent == null) return;
 
@@ -319,6 +363,7 @@ public class GhostAI : MonoBehaviour
             {
                 // Stop Chasing
                 chasingCount--;
+
 
                 // Stop Ghost Sound
                 if (ghostAudioSource != null)
@@ -653,6 +698,8 @@ public class GhostAI : MonoBehaviour
     // Method yang akan dipanggil dari Animation Event
     public void DealDamageToPlayer()
     {
+
+        if (isDead) return;
         // Cek apakah sudah pernah deal damage dalam attack ini
         if (hasDealtDamageThisAttack)
         {
@@ -869,6 +916,7 @@ public class GhostAI : MonoBehaviour
 
     public bool CanAttackPlayer()
     {
+        if (isDead) return false;
         if (player == null) return false;
         return IsPlayerInFront() && IsVerticalPositionValid() && HasLineOfSight();
     }

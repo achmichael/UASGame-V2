@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class GhostHealth : MonoBehaviour
 {
-    [Header("Health Settings")]
+    [Header("Health Settings")] 
     public int maxHealth = 100;
     public int currentHealth;
 
@@ -35,12 +35,6 @@ public class GhostHealth : MonoBehaviour
         currentHealth -= damage;
         Debug.Log($"Ghost took {damage} damage. Current Health: {currentHealth}");
 
-        // Trigger hit animation if available
-        if (anim != null)
-        {
-            anim.SetTrigger("Hit");
-        }
-
         if (currentHealth <= 0)
         {
             Die();
@@ -57,6 +51,7 @@ public class GhostHealth : MonoBehaviour
         // Disable AI
         if (ghostAI != null)
         {
+            ghostAI.OnDeath();
             ghostAI.enabled = false;
             UnityEngine.AI.NavMeshAgent agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
             if (agent != null) agent.isStopped = true;
@@ -71,8 +66,7 @@ public class GhostHealth : MonoBehaviour
         // Play death animation
         if (anim != null)
         {
-            anim.SetTrigger("Die");
-            anim.SetBool("IsDead", true);
+            anim.SetBool("Death", true);
         }
 
         // Spawn death effect
