@@ -127,12 +127,6 @@ public class MovementLogic : MonoBehaviour
         
         // Update animations
         UpdateAnimations();
-        
-        // Debug damage
-        if (Input.GetKeyDown(KeyCode.F))
-        {
-            PlayerGetHit(100f);
-        }
     }
     
     void FixedUpdate()

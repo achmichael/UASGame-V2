@@ -33,6 +33,16 @@ public class LabyrinthSpawnManager : MonoBehaviour
     public int enemyCount = 3;
     public float enemySpawnHeight = 1.0f;
     
+    [Header("Checkpoint Spawn")]
+    public GameObject checkpointPrefab;
+    [Tooltip("Jumlah checkpoint yang akan di-generate")]
+    public int checkpointCount = 3;
+    public float checkpointSpawnHeight = 0.1f;
+    [Tooltip("Minimum jarak checkpoint dari player spawn")]
+    public float minCheckpointDistanceFromPlayer = 10f;
+    [Tooltip("Minimum jarak antar checkpoint")]
+    public float minDistanceBetweenCheckpoints = 15f;
+    
     [Header("Difficulty Settings")]
     [Tooltip("Enemy count per difficulty: Easy=2, Normal=3, Hard=4")]
     private int currentDifficulty = 1; // 0=Easy, 1=Normal, 2=Hard
@@ -65,6 +75,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
     private GameObject spawnedPlayer;
     private List<GameObject> spawnedItems = new List<GameObject>();
     private List<GameObject> spawnedEnemies = new List<GameObject>();
+    private List<GameObject> spawnedCheckpoints = new List<GameObject>();
     
     void Start()
     {
@@ -155,6 +166,9 @@ public class LabyrinthSpawnManager : MonoBehaviour
             
         if (enemyPrefab == null)
             Debug.LogWarning("[SpawnManager] Enemy Prefab not assigned - enemies won't spawn");
+            
+        if (checkpointPrefab == null)
+            Debug.LogWarning("[SpawnManager] Checkpoint Prefab not assigned - checkpoints won't spawn");
     }
     
     /// <summary>
@@ -250,7 +264,13 @@ public class LabyrinthSpawnManager : MonoBehaviour
             SpawnItems(itemCount);
         }
         
-        // 3. Spawn Enemies
+        // 3. Spawn Checkpoints
+        if (checkpointPrefab != null)
+        {
+            SpawnCheckpoints(checkpointCount);
+        }
+        
+        // 4. Spawn Enemies
         if (enemyPrefab != null)
         {
             SpawnEnemies(enemyCount);
@@ -263,6 +283,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         Debug.Log($"=== [SpawnManager] SPAWN COMPLETE ===");
         Debug.Log($"Player: {(spawnedPlayer != null ? "1" : "0")}");
         Debug.Log($"Items: {spawnedItems.Count}/{itemCount}");
+        Debug.Log($"Checkpoints: {spawnedCheckpoints.Count}/{checkpointCount}");
         Debug.Log($"Enemies: {spawnedEnemies.Count}/{enemyCount}");
         Debug.Log($"Total Objects: {spawnedPositions.Count}");
     }
@@ -343,6 +364,132 @@ public class LabyrinthSpawnManager : MonoBehaviour
             Debug.LogWarning($"[SpawnManager] Only spawned {successfulSpawns}/{count} items.");
             Debug.LogWarning($"Try: reducing minDistanceBetweenSpawns ({minDistanceBetweenSpawns}f) or itemCount");
         }
+    }
+    
+    /// <summary>
+    /// Spawn checkpoints dengan jumlah yang exact di posisi random di lantai
+    /// </summary>
+    public void SpawnCheckpoints(int count)
+    {
+        Debug.Log($"[SpawnManager] Spawning {count} checkpoints...");
+        
+        int successfulSpawns = 0;
+        int failedAttempts = 0;
+        int maxFailures = count * 3; // Toleransi untuk checkpoint
+        
+        // Simpan posisi checkpoint untuk distance checking internal
+        List<Vector3> checkpointPositions = new List<Vector3>();
+        
+        for (int i = 0; i < count; i++)
+        {
+            if (failedAttempts >= maxFailures)
+            {
+                Debug.LogWarning($"[SpawnManager] Stopped spawning checkpoints after {maxFailures} failed attempts");
+                break;
+            }
+            
+            // Cari posisi valid dengan jarak dari player dan checkpoint lainnya
+            Vector3 spawnPos = GetRandomCheckpointPosition(checkpointPositions);
+            
+            if (spawnPos == Vector3.zero)
+            {
+                Debug.LogWarning($"[SpawnManager] Failed to spawn checkpoint {i + 1}/{count} - no valid position");
+                failedAttempts++;
+                i--; // Coba lagi untuk index ini
+                continue;
+            }
+            
+            // Instantiate checkpoint
+            GameObject checkpoint = Instantiate(checkpointPrefab, spawnPos, Quaternion.identity);
+            checkpoint.name = $"Checkpoint_{successfulSpawns + 1}";
+            
+            // Setup CheckpointZone component jika ada
+            CheckpointZone checkpointZone = checkpoint.GetComponent<CheckpointZone>();
+            if (checkpointZone != null)
+            {
+                checkpointZone.checkpointID = successfulSpawns;
+            }
+            
+            // Pastikan ada collider trigger
+            Collider col = checkpoint.GetComponent<Collider>();
+            if (col != null)
+            {
+                col.isTrigger = true;
+            }
+            
+            checkpointPositions.Add(spawnPos);
+            spawnedPositions.Add(spawnPos);
+            spawnedCheckpoints.Add(checkpoint);
+            successfulSpawns++;
+            
+            LogDebug($"Checkpoint {successfulSpawns}/{count} spawned at {spawnPos}");
+        }
+        
+        Debug.Log($"[SpawnManager] ✓ Checkpoints spawned: {successfulSpawns}/{count}");
+        
+        if (successfulSpawns < count)
+        {
+            Debug.LogWarning($"[SpawnManager] Only spawned {successfulSpawns}/{count} checkpoints.");
+            Debug.LogWarning($"Try: reducing minDistanceBetweenCheckpoints ({minDistanceBetweenCheckpoints}f) or checkpointCount");
+        }
+    }
+    
+    /// <summary>
+    /// Get random valid position untuk checkpoint dengan distance checking khusus
+    /// </summary>
+    Vector3 GetRandomCheckpointPosition(List<Vector3> existingCheckpoints)
+    {
+        if (gridBuilder == null || gridBuilder.validCells.Count == 0)
+        {
+            Debug.LogError("[SpawnManager] Cannot get checkpoint position - GridBuilder has no valid cells!");
+            return Vector3.zero;
+        }
+        
+        for (int attempt = 0; attempt < maxDistanceAttempts; attempt++)
+        {
+            Vector3 spawnPos = gridBuilder.GetRandomValidCell(checkpointSpawnHeight);
+            
+            if (spawnPos == Vector3.zero)
+                continue;
+            
+            // Check distance dari player spawn
+            if (playerSpawnPosition != Vector3.zero)
+            {
+                if (Vector3.Distance(spawnPos, playerSpawnPosition) < minCheckpointDistanceFromPlayer)
+                    continue;
+            }
+            
+            // Check distance dari checkpoint lainnya
+            bool tooCloseToOtherCheckpoint = false;
+            foreach (Vector3 checkpointPos in existingCheckpoints)
+            {
+                if (Vector3.Distance(spawnPos, checkpointPos) < minDistanceBetweenCheckpoints)
+                {
+                    tooCloseToOtherCheckpoint = true;
+                    break;
+                }
+            }
+            
+            if (tooCloseToOtherCheckpoint)
+                continue;
+            
+            // Check distance dari spawned objects lainnya (items)
+            if (IsTooCloseToOtherSpawns(spawnPos, minDistanceBetweenSpawns))
+                continue;
+            
+            // Position valid!
+            return spawnPos;
+        }
+        
+        // Fallback jika enabled
+        if (allowFallbackSpawn)
+        {
+            Vector3 fallbackPos = gridBuilder.GetRandomValidCell(checkpointSpawnHeight);
+            Debug.LogWarning($"[SpawnManager] Using fallback spawn for checkpoint (distance requirements couldn't be met)");
+            return fallbackPos;
+        }
+        
+        return Vector3.zero;
     }
     
     /// <summary>
@@ -537,6 +684,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         spawnedPositions.Clear();
         spawnedItems.Clear();
         spawnedEnemies.Clear();
+        spawnedCheckpoints.Clear();
         spawnedPlayer = null;
         playerSpawnPosition = Vector3.zero;
         isSpawned = false;
@@ -564,6 +712,7 @@ public class LabyrinthSpawnManager : MonoBehaviour
         Debug.Log($"Enemy Speed Multiplier: {enemySpeedMultiplier}x");
         Debug.Log($"Player: {(spawnedPlayer != null ? "1" : "0")}");
         Debug.Log($"Items: {spawnedItems.Count} (requested: {itemCount})");
+        Debug.Log($"Checkpoints: {spawnedCheckpoints.Count} (requested: {checkpointCount})");
         Debug.Log($"Enemies: {spawnedEnemies.Count} (requested: {enemyCount})");
         Debug.Log($"Total spawned positions: {spawnedPositions.Count}");
         Debug.Log($"Valid cells available: {(gridBuilder != null ? gridBuilder.validCells.Count : 0)}");
