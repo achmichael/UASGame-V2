@@ -349,6 +349,13 @@ public class GameManager : MonoBehaviour
 
     void TriggerNormalEnding()
     {
+        // Stop semua audio sebelum pindah scene
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopMusic();
+            AudioManager.Instance.StopHeartbeat();
+        }
+
         SceneManager.LoadScene("TrueEnding");
     }
 
