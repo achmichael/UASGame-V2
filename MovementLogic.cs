@@ -51,6 +51,11 @@ public class MovementLogic : MonoBehaviour
     public float attackCooldown = 0.5f;
     public LayerMask enemyLayer;
     private float lastAttackTime;
+
+    [Header("Audio Settings")]
+    private AudioSource footstepAudioSource;
+    public AudioClip footstepClip;
+    [Range(0f, 1f)] public float footstepVolume = 0.5f;
     
     // Private variables
     private float horizontalInput;
@@ -92,6 +97,13 @@ public class MovementLogic : MonoBehaviour
         if (anim == null)
         {
             anim = GetComponent<Animator>();
+        }
+
+        // Setup Audio
+        footstepAudioSource = GetComponent<AudioSource>();
+        if (footstepAudioSource == null)
+        {
+            footstepAudioSource = gameObject.AddComponent<AudioSource>();
         }
         
         Debug.Log("[MovementLogic] Initialized - Walk Speed: " + walkSpeed + ", Run Speed: " + runSpeed);
@@ -493,6 +505,19 @@ public class MovementLogic : MonoBehaviour
         }
     }
     
+    // ==================== AUDIO METHODS ====================
+
+    /// <summary>
+    /// Dipanggil via Animation Event pada frame kaki menyentuh tanah
+    /// </summary>
+    public void PlayFootstepSound()
+    {
+        if (footstepAudioSource != null && footstepClip != null)
+        {            
+                footstepAudioSource.PlayOneShot(footstepClip, footstepVolume);
+        }
+    }
+
     /// <summary>
     /// PUBLIC: Set stair state - dipanggil dari StairClimber
     /// </summary>

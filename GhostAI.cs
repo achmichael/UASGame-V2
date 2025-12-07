@@ -129,17 +129,17 @@ public class GhostAI : MonoBehaviour
         switch (difficulty)
         {
             case 0: // Easy
-                moveSpeed = 3f;
+                moveSpeed = 2f;
                 chaseRange = 8f;
                 wanderSpeed = 1.5f;
                 break;
             case 1: // Normal
-                moveSpeed = 4f;
+                moveSpeed = 3f;
                 chaseRange = 12f;
                 wanderSpeed = 2f;
                 break;
             case 2: // Hard
-                moveSpeed = 5f;
+                moveSpeed = 4f;
                 chaseRange = 15f;
                 wanderSpeed = 2.5f;
                 break;
